@@ -1,6 +1,10 @@
 # 3Point: Proje Yol Haritası (Roadmap)
 
 > **Vizyon:** 3Point; 3D modelleme, iskelet/karakter animasyonu ve gerçek zamanlı oyun motoru runtime'ını tek bir çatı altında toplayan, %100 Rust ile yazılmış, modern, modüler ve yüksek performanslı bir dijital içerik üretim (DCC) ve oyun geliştirme stüdyosudur.
+>
+> **Hedef Kitle & Donanım Profili:**
+> * **Birincil Hedef:** Yeni başlayanlar, öğrenciler, bağımsız geliştiriciler ve düşük donanımlı (entegre Intel/AMD GPU'lu dizüstü bilgisayarlar, eski nesil ekran kartları) kullanıcılar. Karmaşık menüler yerine sezgisel ve hafif bir stüdyo deneyimi.
+> * **İkincil Hedef:** Yüksek donanımlı sistemlerde çalışan, sıfır gecikmeli iş akışı ve ileri seviye PBR/GPU culling yeteneklerini talep eden profesyoneller.
 
 ---
 
@@ -62,18 +66,17 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
 ---
 
 ### Faz 1: Grafik & Render Altyapısı (`tp_gfx`)
-*Hedef: Düşük seviyeli GPU yönetimi, donanım hızlandırmalı PBR boru hattı ve esnek bir Render Graph inşası.*
+*Hedef: Düşük seviyeli GPU yönetimi, düşük donanım uyumluluğu (wgpu), ölçeklenebilir PBR ve MatCap render hattı.*
 
-- [ ] **Grafik Katmanı Soyutlaması:**
-  - Modern Vulkan (`ash`) veya taşınabilir Vulkan/Metal/DX12 soyutlaması (`wgpu`).
-  - Cihaz başlatma, swapchain yönetimi ve present senkronizasyonu.
+- [ ] **Grafik Katmanı Soyutlaması (`wgpu`):**
+  - Vulkan, DX12, Metal ve eski donanımlar için OpenGL/GLES fallback desteği.
+  - Cihaz başlatma, swapchain yönetimi, adapter ve limit yapılandırması (düşük VRAM'li sistemler için optimize).
+- [ ] **Ölçeklenebilir Render Hattı (Scalable Pipeline):**
+  - **Düşük Donanım / Modelleme Modu:** MatCap (Material Capture) ve temel yönsüz/Blinn-Phong aydınlatma (Intel HD Graphics'te bile 60+ FPS).
+  - **Studio PBR Modu:** Cook-Torrance BRDF (Metallic-Roughness), HDR IBL ve dinamik gölgeler.
 - [ ] **Render Graph (Frame Graph) Mimarisi:**
   - Render geçişlerinin (passes) yönlendirilmiş asiklik çizge (DAG) olarak derlenmesi.
   - Kaynakların (Texture, Buffer) otomatik bellek yeniden kullanımı ve senkronizasyon bariyerleri.
-- [ ] **PBR Render Boru Hattı:**
-  - Cook-Torrance mikro yüzey BRDF (Metallic-Roughness iş akışı).
-  - HDR Skybox ve Image-Based Lighting (IBL) / Irradiance hesaplamaları.
-  - Gölgelendirme: Cascaded Shadow Maps (CSM) ve yumuşak gölge filtreleme (PCF).
 - [ ] **Geliştirici & Hata Ayıklama Görselleştirmeleri:**
   - Grid düzlemi, koordinat eksenleri, bounding box'lar ve kamera frustum tel kafesleri.
 

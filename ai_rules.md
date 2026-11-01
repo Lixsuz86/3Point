@@ -58,6 +58,11 @@ unsafe {
 * Uzun süreli kilitlenmelerden kaçınmak için standart kütüphane kilitleri yerine `parking_lot::Mutex` ve `parking_lot::RwLock` kullanılmalıdır.
 * Render döngüsünün ana iş parçacığı (main thread) asla arka plan dosya yükleme veya karmaşık CSG/mesh hesaplamaları için bloke edilmemelidir. Bu işler `rayon` veya bir kanal (`crossbeam-channel`) üzerinden arka plan iş havuzuna yönlendirilmelidir.
 
+### 3.3. Düşük Donanım Uyumluluğu ve Kaynak Yönetimi
+* **Geniş GPU Uyumluluğu:** Yalnızca üst düzey kartlarda bulunan donanımsal Ray Tracing veya özel Vulkan 1.3 uzantılarına bağımlı kalınmamalıdır. Çekirdek özellikler `wgpu::Limits::downlevel_webgl2_defaults()` veya temel masaüstü limitleri seviyesinde de çalışabilir olmalıdır.
+* **Düşük VRAM Ayak İzi:** Varsayılan doku ve geometri boyutları akıllıca sınırlandırılmalı; düşük özellikli entegre kartlar (Intel HD/UHD) göz önünde bulundurularak VRAM tüketimi minimumda tutulmalıdır.
+* **CPU Yükünü Hafifletme:** Zayıf çift çekirdekli işlemcilerde dahi UI ve viewport tepkiselliğini korumak adına gereksiz polling ve boş döngülerden (busy-waiting) kaçınılmalıdır.
+
 ---
 
 ## 4. Hata Yönetimi (Error Handling) ve Savunmacı Kodlama
