@@ -1,0 +1,20 @@
+[package]
+name = "tp_app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "3point"
+path = "src/main.rs"
+
+[dependencies]
+tp_math.workspace = true
+tp_core.workspace = true
+
+winit.workspace = true
+raw-window-handle.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+

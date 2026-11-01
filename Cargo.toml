@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tp_math",
+    "crates/tp_core",
+    "crates/tp_app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["3Point Contributors"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Yerel Crate'ler
+tp_math = { path = "crates/tp_math" }
+tp_core = { path = "crates/tp_core" }
+
+# Matematik & Bellek Hizalaması
+glam = { version = "0.29", default-features = true }
+bytemuck = { version = "1.19", features = ["derive"] }
+
+# Teşhis, Loglama ve Profilleme
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+puffin = "0.19"
+
+# Hata Yönetimi
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Eşzamanlılık & Görev Havuzları
+rayon = "1.10"
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+
+# Pencereleme ve Giriş Yönetimi
+winit = "0.30"
+raw-window-handle = "0.6"
+
