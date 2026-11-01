@@ -66,13 +66,18 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
 ---
 
 ### Faz 1: Grafik & Render Altyapısı (`tp_gfx`)
-*Hedef: Düşük seviyeli GPU yönetimi, düşük donanım uyumluluğu (wgpu), ölçeklenebilir PBR ve MatCap render hattı.*
+*Hedef: Saf Vulkan (ash) donanım katmanı, çoklu GPU puanlama (Entegre + Ayrık kartlar), Swapchain ve Frames-in-Flight senkronizasyonu.*
 
-- [ ] **Grafik Katmanı Soyutlaması (`wgpu`):**
-  - Vulkan, DX12, Metal ve eski donanımlar için OpenGL/GLES fallback desteği.
-  - Cihaz başlatma, swapchain yönetimi, adapter ve limit yapılandırması (düşük VRAM'li sistemler için optimize).
+- [x] **Vulkan Grafik Donanım Katmanı (`ash`):**
+  - Vulkan 1.2 tabanı ile geniş donanım uyumluluğu (Eski entegre Intel/AMD GPU'lar ve modern kartlar).
+  - Güvenli `Instance`, hata ayıklama doğrulama katmanları (`VK_LAYER_KHRONOS_validation`), ve platformlar arası `Surface`.
+  - Akıllı GPU seçimi: Ayrık GPU önceliği ve entegre GPU desteği ile grafik/sunum kuyruk aileleri.
+- [x] **Swapchain & Senkronizasyon:**
+  - Dynamic Extent, sRGB renk uzayı, V-Sync/Mailbox sunum modları ve pencere boyutu değişiminde otomatik `recreate_swapchain`.
+  - CPU-GPU eşzamanlılığı için 2 Frames-in-Flight semafor ve fence yönetimi.
+  - Standart RenderPass ve Framebuffer boru hattı ile stüdyo koyu arka plan render döngüsü.
 - [ ] **Ölçeklenebilir Render Hattı (Scalable Pipeline):**
-  - **Düşük Donanım / Modelleme Modu:** MatCap (Material Capture) ve temel yönsüz/Blinn-Phong aydınlatma (Intel HD Graphics'te bile 60+ FPS).
+  - **Düşük Donanım / Modelleme Modu:** MatCap (Material Capture) ve temel yönsüz/Blinn-Phong aydınlatma.
   - **Studio PBR Modu:** Cook-Torrance BRDF (Metallic-Roughness), HDR IBL ve dinamik gölgeler.
 - [ ] **Render Graph (Frame Graph) Mimarisi:**
   - Render geçişlerinin (passes) yönlendirilmiş asiklik çizge (DAG) olarak derlenmesi.

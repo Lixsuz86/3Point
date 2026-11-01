@@ -1,7 +1,9 @@
-//! 3Point Ana Uygulama Durum Makinesi ve Pencere Yönetimi (`winit 0.30`).
+//! 3Point Ana Uygulama Durum Makinesi ve Vulkan Pencere Entegrasyonu (`winit 0.30`).
 
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
 use tp_core::{TaskPool, Time};
+use tp_gfx::GfxContext;
 use tp_math::{Transform, Vec3};
 use winit::{
     application::ApplicationHandler,
@@ -15,6 +17,7 @@ use winit::{
 /// 3Point masaüstü uygulamasının çalışma zamanı durumu.
 pub struct App {
     window: Option<Arc<Window>>,
+    gfx: Option<GfxContext>,
     time: Time,
     task_pool: TaskPool,
     camera_transform: Transform,
@@ -38,6 +41,7 @@ impl App {
 
         Self {
             window: None,
+            gfx: None,
             time: Time::new(),
             task_pool,
             camera_transform: Transform::from_translation(Vec3::new(0.0, 2.0, 5.0)),
@@ -63,26 +67,60 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let window_attributes = WindowAttributes::default()
-                .with_title("3Point Studio (v0.1.0-alpha)")
+                .with_title("3Point Studio - Vulkan (v0.1.0-alpha)")
                 .with_inner_size(LogicalSize::new(1280.0, 720.0))
                 .with_min_inner_size(LogicalSize::new(800.0, 600.0));
 
-            match event_loop.create_window(window_attributes) {
-                Ok(window) => {
-                    let window = Arc::new(window);
-                    tracing::info!(
-                        "Pencere başarıyla oluşturuldu: ID={:?}, Boyut: {:?}, Görev Havuzu: {} iş parçacığı",
-                        window.id(),
-                        window.inner_size(),
-                        self.task_pool().num_threads()
-                    );
-                    self.window = Some(window);
-                }
+            let window = match event_loop.create_window(window_attributes) {
+                Ok(w) => Arc::new(w),
                 Err(err) => {
                     tracing::error!("Pencere oluşturulamadı: {err}");
                     event_loop.exit();
+                    return;
+                }
+            };
+
+            let size = window.inner_size();
+            tracing::info!(
+                "Pencere başarıyla oluşturuldu: ID={:?}, Boyut: {}x{}, Görev Havuzu: {} iş parçacığı",
+                window.id(),
+                size.width,
+                size.height,
+                self.task_pool().num_threads()
+            );
+
+            // Vulkan Grafik Bağlamını (GfxContext) Başlat
+            let display_handle = match event_loop.display_handle() {
+                Ok(dh) => dh.as_raw(),
+                Err(err) => {
+                    tracing::error!("Ekran tutucusu (Display Handle) alınamadı: {err}");
+                    event_loop.exit();
+                    return;
+                }
+            };
+
+            let window_handle = match window.window_handle() {
+                Ok(wh) => wh.as_raw(),
+                Err(err) => {
+                    tracing::error!("Pencere tutucusu (Window Handle) alınamadı: {err}");
+                    event_loop.exit();
+                    return;
+                }
+            };
+
+            match GfxContext::new(display_handle, window_handle, size.width, size.height) {
+                Ok(gfx) => {
+                    tracing::info!("Vulkan Grafik Motoru (tp_gfx) başarıyla pencereye bağlandı!");
+                    self.gfx = Some(gfx);
+                }
+                Err(err) => {
+                    tracing::error!("Vulkan grafik motoru başlatılamadı: {err}");
+                    event_loop.exit();
+                    return;
                 }
             }
+
+            self.window = Some(window);
         }
     }
 
@@ -112,22 +150,42 @@ impl ApplicationHandler for App {
                     physical_size.width,
                     physical_size.height
                 );
+                if let Some(gfx) = &mut self.gfx {
+                    gfx.notify_resize();
+                }
             }
 
             WindowEvent::RedrawRequested => {
                 self.time.update();
 
-                // Her 120 karede bir FPS ve kamera bilgisi logla (debug)
+                // Her 120 karede bir FPS ve kamera durumu logla
                 if self.time.frame_count().is_multiple_of(120) {
                     tracing::debug!(
-                        "FPS: {:.1} | Frame: {} | Kamera Pos: {:?}",
+                        "Vulkan Viewport | FPS: {:.1} | Frame: {} | Kamera: {:?}",
                         self.time.fps(),
                         self.time.frame_count(),
                         self.camera_transform().translation
                     );
                 }
 
-                if let Some(window) = &self.window {
+                // Vulkan Çizim Döngüsü
+                if let (Some(gfx), Some(window)) = (&mut self.gfx, &self.window) {
+                    let size = window.inner_size();
+                    match gfx.begin_frame(size.width, size.height) {
+                        Ok(Some(frame)) => {
+                            // Çizim komutları (RenderPass) burada yürütülür
+                            if let Err(err) = gfx.end_frame(frame, size.width, size.height) {
+                                tracing::error!("Kare sunum hatası: {err}");
+                            }
+                        }
+                        Ok(None) => {
+                            // Swapchain yeniden boyutlandırıldı veya pencere simge durumunda
+                        }
+                        Err(err) => {
+                            tracing::error!("Kare başlatma hatası: {err}");
+                        }
+                    }
+
                     window.request_redraw();
                 }
             }

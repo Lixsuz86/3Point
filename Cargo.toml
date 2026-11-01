@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/tp_math",
     "crates/tp_core",
+    "crates/tp_gfx",
     "crates/tp_app",
 ]
 
@@ -16,6 +17,12 @@ license = "MIT OR Apache-2.0"
 # Yerel Crate'ler
 tp_math = { path = "crates/tp_math" }
 tp_core = { path = "crates/tp_core" }
+tp_gfx = { path = "crates/tp_gfx" }
+
+# Grafik Donanım Katmanı (Vulkan)
+ash = "0.38"
+ash-window = "0.13"
+gpu-allocator = { version = "0.27", default-features = false, features = ["vulkan"] }
 
 # Matematik & Bellek Hizalaması
 glam = { version = "0.29", default-features = true }
