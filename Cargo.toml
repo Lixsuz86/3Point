@@ -5,6 +5,7 @@ members = [
     "crates/tp_core",
     "crates/tp_gfx",
     "crates/tp_mesh",
+    "crates/tp_ui",
     "crates/tp_app",
 ]
 
@@ -20,6 +21,11 @@ tp_math = { path = "crates/tp_math" }
 tp_core = { path = "crates/tp_core" }
 tp_gfx = { path = "crates/tp_gfx" }
 tp_mesh = { path = "crates/tp_mesh" }
+tp_ui = { path = "crates/tp_ui" }
+
+# GUI & Editör Katmanı
+egui = "0.29"
+egui-winit = { version = "0.29", default-features = false, features = ["links"] }
 
 # Grafik Donanım Katmanı (Vulkan)
 ash = "0.38"

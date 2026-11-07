@@ -14,6 +14,7 @@ tp_math.workspace = true
 tp_core.workspace = true
 tp_gfx.workspace = true
 tp_mesh.workspace = true
+tp_ui.workspace = true
 
 winit.workspace = true
 raw-window-handle.workspace = true

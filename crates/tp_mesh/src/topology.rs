@@ -89,3 +89,4 @@ pub struct Face {
     /// Silinmişlik durumu.
     pub is_deleted: bool,
 }
+

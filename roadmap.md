@@ -111,18 +111,20 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
 ### Faz 3: UI/UX & Editör Katmanı (`tp_ui`)
 *Hedef: Akıcı, modern, yerleştirilebilir (dockable) panel yapısıyla tümleşik DCC stüdyo arayüzü.*
 
-- [ ] **`egui` & `egui_dock` Entegrasyonu:**
-  - Panel yerleşim motoru: Sekmeli, bölünebilir, serbest bırakılabilir arayüz.
-- [ ] **Sahne Viewport Entegrasyonu:**
-  - Özel doku hedefli framebuffer renderlama (Off-screen rendering to egui image).
-  - Akıcı kamera kontrolleri (Orbit, Pan, Zoom, Free-Fly, İzometrik/Ortografik bakış açıları).
-- [ ] **Manipülasyon Gizmo'ları:**
-  - 3D Taşıma (Translate), Döndürme (Rotate), Ölçekleme (Scale) eksenleri.
-  - Grid Snapping ve Vertex Snapping mantığı.
-- [ ] **Temel Editör Panelleri:**
-  - **Outliner (Sahne Hiyerarşisi):** Nesne ağacı, parent-child ilişkileri.
-  - **Inspector (Özellik Paneli):** Transform, materyal, mesh ve bileşen düzenleyicisi.
-  - **Asset Browser:** Model ve doku varlıklarının önizleme listesi.
+- [x] **`egui` & `egui-winit` Vulkan Entegrasyonu (`EguiVulkanRenderer`):**
+  - Sıfır kopyalı vertex/index transferi, font doku atlası yükleme, scissor clipping ile doğrudan Vulkan RenderPass üzerinde GPU çizimi.
+  - Özel koyu stüdyo teması (Blender 4.x & Unreal 5 estetiği, yüksek kontrast ve göz yormayan palet).
+- [x] **Sahne Viewport & Giriş Yönetimi:**
+  - Akıcı kamera kontrolleri (Orbit, Pan, Zoom) ve egui giriş tüketim mekanizması (`handle_event`).
+  - Viewport üzerinde 3D çizim ve UI panellerinin eşzamanlı sıfır gecikmeli çalışması.
+- [x] **Manipülasyon Araçları & Seçenekler:**
+  - Taşıma (Translate), Döndürme (Rotate), Ölçekleme (Scale) ve Seçim araçları.
+  - Grid Snapping anahtarı ve topoloji seçim modları (Vertex, Edge, Face).
+- [x] **Temel Editör Panelleri:**
+  - **Üst Menü Çubuğu (Top Menu Bar):** Dosya, Düzenle, Ekle (Küp, Küre, Silindir, Düzlem), Görünüm (MatCap, PBR, Wireframe) ve Stüdyo Modları (Modelleme, Animasyon, Sahne, Oyun).
+  - **Sol Araç Çubuğu (Toolbox):** Hızlı erişim seçim filtreleri, transform araçları ve modelleme butonları (Extrude, Inset, Subdivide).
+  - **Outliner (Sahne Hiyerarşisi):** Sahne nesneleri ağacı (Mesh, Kamera, Işık), görünürlük açma/kapatma ve odaklanma.
+  - **Inspector (Özellik Paneli):** Hassas sayısal Transform (X/Y/Z Konum, Döndürme, Ölçek), anlık poligon/kenar/yüzey sayaçları ve parametrik modelleme girdileri.
 
 ---
 

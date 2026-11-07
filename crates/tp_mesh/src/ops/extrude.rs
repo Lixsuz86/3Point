@@ -65,3 +65,4 @@ mod tests {
         assert_eq!(top_face.0, initial_face_count as u32 + 4); // 4 yan yüzey + 1 tavan yüzeyi
     }
 }
+

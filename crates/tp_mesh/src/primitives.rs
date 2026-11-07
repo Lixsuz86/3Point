@@ -196,3 +196,4 @@ pub fn create_cylinder(radius: f32, height: f32, segments: u32) -> HalfEdgeMesh 
     mesh.compute_vertex_normals();
     mesh
 }
+

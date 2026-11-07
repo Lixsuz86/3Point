@@ -75,3 +75,4 @@ mod tests {
         assert_eq!(inner_face.0, initial_face_count as u32 + 4); // 4 çevre yüzeyi + 1 iç yüzey
     }
 }
+

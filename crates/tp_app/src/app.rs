@@ -1,19 +1,23 @@
-//! 3Point Ana Uygulama Durum Makinesi ve Vulkan 3D Modelleme Viewport'u (`winit 0.30`).
+//! 3Point Ana Uygulama Durum Makinesi ve Vulkan 3D DCC Editörü (`winit 0.30`).
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
 use tp_core::{TaskPool, Time};
 use tp_gfx::{GfxContext, GpuBuffer};
-use tp_math::{glam::Mat4, Transform, Vec3, Vec4};
+use tp_math::{
+    glam::{EulerRot, Mat4, Quat},
+    Transform, Vec3, Vec4,
+};
 use tp_mesh::{
     bvh::MeshBvh,
-    create_cube,
+    create_cube, create_cylinder, create_plane, create_uv_sphere,
     history::SnapshotMeshCommand,
     mesh::HalfEdgeMesh,
     picking::pick_face,
     topology::FaceId,
     UndoStack,
 };
+use tp_ui::{Editor, EditorEvent, EditorSceneContext, ShadingMode};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -34,6 +38,7 @@ struct ActiveMeshGpu {
 pub struct App {
     window: Option<Arc<Window>>,
     gfx: Option<GfxContext>,
+    editor: Option<Editor>,
     time: Time,
     task_pool: TaskPool,
 
@@ -43,6 +48,11 @@ pub struct App {
     mesh_gpu: Option<ActiveMeshGpu>,
     undo_stack: UndoStack,
     selected_face: Option<FaceId>,
+
+    // Mesh Nesne Dönüşüm Bilgileri (Transform)
+    mesh_position: Vec3,
+    mesh_rotation: Vec3,
+    mesh_scale: Vec3,
 
     // Kamera Orbit & Navigasyon Durumu
     camera_target: Vec3,
@@ -78,17 +88,21 @@ impl App {
         Self {
             window: None,
             gfx: None,
+            editor: None,
             time: Time::new(),
             task_pool,
             active_mesh: mesh,
             mesh_bvh: bvh,
             mesh_gpu: None,
             undo_stack: UndoStack::new(50),
-            selected_face: Some(FaceId(3)), // Varsayılan tavan yüzeyi seçili
+            selected_face: Some(FaceId(3)),
+            mesh_position: Vec3::ZERO,
+            mesh_rotation: Vec3::ZERO,
+            mesh_scale: Vec3::ONE,
             camera_target: Vec3::new(0.0, 0.5, 0.0),
             camera_distance: 6.0,
-            camera_yaw: 0.785,  // 45 derece
-            camera_pitch: 0.523, // 30 derece
+            camera_yaw: 0.785,
+            camera_pitch: 0.523,
             is_orbiting: false,
             is_panning: false,
             last_mouse_pos: None,
@@ -160,13 +174,24 @@ impl App {
 
         (view, proj, eye)
     }
+
+    /// Mesh dönüşüm matrisini oluşturur.
+    pub fn compute_model_matrix(&self) -> Mat4 {
+        let rot_quat = Quat::from_euler(
+            EulerRot::XYZ,
+            self.mesh_rotation.x.to_radians(),
+            self.mesh_rotation.y.to_radians(),
+            self.mesh_rotation.z.to_radians(),
+        );
+        Mat4::from_scale_rotation_translation(self.mesh_scale, rot_quat, self.mesh_position)
+    }
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let window_attributes = WindowAttributes::default()
-                .with_title("3Point Studio - Vulkan 3D Modeler [E: Extrude | I: Inset | Space: Subdivide | Z: Undo]")
+                .with_title("3Point Studio - 3D DCC & Vulkan Engine (v0.1.0-beta)")
                 .with_inner_size(LogicalSize::new(1280.0, 720.0))
                 .with_min_inner_size(LogicalSize::new(800.0, 600.0));
 
@@ -181,7 +206,7 @@ impl ApplicationHandler for App {
 
             let size = window.inner_size();
             tracing::info!(
-                "Pencere başarıyla oluşturuldu: ID={:?}, Boyut: {}x{}, Görev Havuzu: {} iş parçacığı",
+                "Pencere oluşturuldu: ID={:?}, Boyut: {}x{}, Görev Havuzu: {} iş parçacığı",
                 window.id(),
                 size.width,
                 size.height,
@@ -207,8 +232,15 @@ impl ApplicationHandler for App {
             };
 
             match GfxContext::new(display_handle, window_handle, size.width, size.height) {
-                Ok(gfx) => {
+                Ok(mut gfx) => {
                     tracing::info!("Vulkan Grafik Motoru başarıyla bağlandı!");
+
+                    // UI Editör Katmanını Başlat
+                    match Editor::new(&window, &gfx.device.device, &mut gfx.allocator, gfx.render_pass.render_pass) {
+                        Ok(editor) => self.editor = Some(editor),
+                        Err(err) => tracing::error!("UI Editör başlatılamadı: {err}"),
+                    }
+
                     self.gfx = Some(gfx);
                     self.sync_mesh_to_gpu();
                 }
@@ -224,6 +256,13 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+        // 1. Önce olayı egui editörüne ilet
+        let is_consumed_by_ui = if let (Some(editor), Some(window)) = (&mut self.editor, &self.window) {
+            editor.handle_event(window, &event)
+        } else {
+            false
+        };
+
         match event {
             WindowEvent::CloseRequested => {
                 tracing::info!("Kullanıcı pencereyi kapattı. Çıkış yapılıyor...");
@@ -238,17 +277,15 @@ impl ApplicationHandler for App {
                         ..
                     },
                 ..
-            } => match key_code {
+            } if !is_consumed_by_ui => match key_code {
                 KeyCode::Escape => {
                     tracing::info!("ESC basıldı, çıkış yapılıyor.");
                     event_loop.exit();
                 }
                 KeyCode::KeyE => {
-                    // Extrude Operatörü
                     if let Some(fid) = self.selected_face {
                         let cmd = SnapshotMeshCommand::new("Extrude Face", move |m| {
-                            let new_face = m.extrude_face(fid, 0.8)?;
-                            tracing::info!("Yüzey ekstrüde edildi: {:?}", new_face);
+                            m.extrude_face(fid, 0.8)?;
                             Ok(())
                         });
                         if self.undo_stack.execute(cmd, &mut self.active_mesh).is_ok() {
@@ -258,11 +295,9 @@ impl ApplicationHandler for App {
                     }
                 }
                 KeyCode::KeyI => {
-                    // Inset Operatörü
                     if let Some(fid) = self.selected_face {
                         let cmd = SnapshotMeshCommand::new("Inset Face", move |m| {
-                            let new_face = m.inset_face(fid, 0.25)?;
-                            tracing::info!("Yüzey içe daraltıldı (Inset): {:?}", new_face);
+                            m.inset_face(fid, 0.25)?;
                             Ok(())
                         });
                         if self.undo_stack.execute(cmd, &mut self.active_mesh).is_ok() {
@@ -272,10 +307,8 @@ impl ApplicationHandler for App {
                     }
                 }
                 KeyCode::Space => {
-                    // Subdivide Operatörü
                     let cmd = SnapshotMeshCommand::new("Subdivide Mesh", |m| {
                         *m = m.subdivide();
-                        tracing::info!("Mesh alt-bölündü (Subdivide): {} yüzey", m.faces.len());
                         Ok(())
                     });
                     if self.undo_stack.execute(cmd, &mut self.active_mesh).is_ok() {
@@ -284,9 +317,7 @@ impl ApplicationHandler for App {
                     }
                 }
                 KeyCode::KeyZ => {
-                    // Undo
                     if let Ok(true) = self.undo_stack.undo(&mut self.active_mesh) {
-                        tracing::info!("İşlem geri alındı (Undo).");
                         self.selected_face = None;
                         self.sync_mesh_to_gpu();
                     }
@@ -294,14 +325,14 @@ impl ApplicationHandler for App {
                 _ => {}
             },
 
-            WindowEvent::MouseInput { button, state, .. } => {
+            WindowEvent::MouseInput { button, state, .. } if !is_consumed_by_ui => {
                 let is_pressed = state == ElementState::Pressed;
                 match button {
                     MouseButton::Right => self.is_orbiting = is_pressed,
                     MouseButton::Middle => self.is_panning = is_pressed,
                     MouseButton::Left if is_pressed => {
-                        // Tıklama ile Ray-Picking
-                        if let (Some(window), Some((mx, my))) = (&self.window, self.last_mouse_pos) {
+                        let window_clone = self.window.clone();
+                        if let (Some(window), Some((mx, my))) = (window_clone, self.last_mouse_pos) {
                             let size = window.inner_size();
                             let (view, proj, eye) = self.compute_camera_matrices(size.width, size.height);
                             let view_proj = proj * view;
@@ -349,7 +380,7 @@ impl ApplicationHandler for App {
                 self.last_mouse_pos = Some((position.x, position.y));
             }
 
-            WindowEvent::MouseWheel { delta, .. } => {
+            WindowEvent::MouseWheel { delta, .. } if !is_consumed_by_ui => {
                 let zoom_amount = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y * 0.5,
                     MouseScrollDelta::PixelDelta(p) => (p.y as f32) * 0.02,
@@ -367,10 +398,97 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 self.time.update();
 
-                let Some(window) = &self.window else { return };
+                let Some(window) = self.window.clone() else { return };
                 let size = window.inner_size();
                 let (view, proj, eye) = self.compute_camera_matrices(size.width, size.height);
+                let model_matrix = self.compute_model_matrix();
 
+                // 2. UI Güncellemesi (Tessellation)
+                let editor_event = if let Some(editor) = &mut self.editor {
+                    let mut scene_ctx = EditorSceneContext {
+                        position: &mut self.mesh_position,
+                        rotation: &mut self.mesh_rotation,
+                        scale: &mut self.mesh_scale,
+                        vertex_count: self.active_mesh.vertices.len(),
+                        edge_count: self.active_mesh.edges.len(),
+                        face_count: self.active_mesh.faces.len(),
+                        selected_face: self.selected_face,
+                    };
+                    editor.update(&window, &mut scene_ctx)
+                } else {
+                    None
+                };
+
+                // UI Buton Olaylarını İşle
+                if let Some(event) = editor_event {
+                    match event {
+                        EditorEvent::Extrude(dist) => {
+                            if let Some(fid) = self.selected_face {
+                                let cmd = SnapshotMeshCommand::new("Extrude Face", move |m| {
+                                    m.extrude_face(fid, dist)?;
+                                    Ok(())
+                                });
+                                if self.undo_stack.execute(cmd, &mut self.active_mesh).is_ok() {
+                                    self.selected_face = Some(FaceId(self.active_mesh.faces.len() as u32 - 1));
+                                    self.sync_mesh_to_gpu();
+                                }
+                            }
+                        }
+                        EditorEvent::Inset(factor) => {
+                            if let Some(fid) = self.selected_face {
+                                let cmd = SnapshotMeshCommand::new("Inset Face", move |m| {
+                                    m.inset_face(fid, factor)?;
+                                    Ok(())
+                                });
+                                if self.undo_stack.execute(cmd, &mut self.active_mesh).is_ok() {
+                                    self.selected_face = Some(FaceId(self.active_mesh.faces.len() as u32 - 1));
+                                    self.sync_mesh_to_gpu();
+                                }
+                            }
+                        }
+                        EditorEvent::Subdivide => {
+                            let cmd = SnapshotMeshCommand::new("Subdivide Mesh", |m| {
+                                *m = m.subdivide();
+                                Ok(())
+                            });
+                            if self.undo_stack.execute(cmd, &mut self.active_mesh).is_ok() {
+                                self.selected_face = None;
+                                self.sync_mesh_to_gpu();
+                            }
+                        }
+                        EditorEvent::Undo => {
+                            if let Ok(true) = self.undo_stack.undo(&mut self.active_mesh) {
+                                self.selected_face = None;
+                                self.sync_mesh_to_gpu();
+                            }
+                        }
+                        EditorEvent::Redo => {
+                            if let Ok(true) = self.undo_stack.redo(&mut self.active_mesh) {
+                                self.selected_face = None;
+                                self.sync_mesh_to_gpu();
+                            }
+                        }
+                        EditorEvent::AddPrimitive(name) => {
+                            let new_m = match name {
+                                "Cube" => create_cube(Vec3::splat(1.5)),
+                                "Sphere" => create_uv_sphere(1.0, 16, 16),
+                                "Cylinder" => create_cylinder(0.8, 1.8, 16),
+                                "Plane" => create_plane(3.0, 3.0, 4, 4),
+                                _ => create_cube(Vec3::splat(1.5)),
+                            };
+                            let cmd = SnapshotMeshCommand::new("Add Primitive", move |m| {
+                                *m = new_m;
+                                Ok(())
+                            });
+                            if self.undo_stack.execute(cmd, &mut self.active_mesh).is_ok() {
+                                self.selected_face = None;
+                                self.sync_mesh_to_gpu();
+                            }
+                        }
+                    }
+                }
+
+                // 3. Vulkan Çizim Döngüsü
                 if let Some(gfx) = &mut self.gfx {
                     let view_proj = proj * view;
                     let inv_view_proj = view_proj.inverse();
@@ -383,22 +501,33 @@ impl ApplicationHandler for App {
                             // 1. Zemin Izgarası (Infinite Grid)
                             gfx.grid.draw(device, cmd, inv_view_proj, eye, 0.1, 1000.0);
 
-                            // 2. 3D Model Çizimi (MatCap Modelleme Modu)
-                            if let Some(gpu) = &self.mesh_gpu {
-                                gfx.mesh_pipeline.draw(
-                                    device,
-                                    cmd,
-                                    gpu.vertex_buffer.buffer,
-                                    gpu.index_buffer.buffer,
-                                    gpu.index_count,
-                                    Mat4::IDENTITY,
-                                    view_proj,
-                                    eye,
-                                    1, // 1: MatCap Modelleme Aydınlatması (Ultra akıcı)
-                                    Vec4::new(0.82, 0.84, 0.88, 1.0),
-                                    0.2,
-                                    0.4,
-                                );
+                            // 2. 3D Model Çizimi
+                            let mesh_visible = self.editor.as_ref().is_none_or(|e| e.mesh_visible);
+                            let shading_mode = self.editor.as_ref().map_or(ShadingMode::MatCap, |e| e.shading_mode);
+
+                            if mesh_visible {
+                                if let Some(gpu) = &self.mesh_gpu {
+                                    let render_mode = match shading_mode {
+                                        ShadingMode::Wireframe => 0,
+                                        ShadingMode::MatCap => 1,
+                                        ShadingMode::Pbr => 2,
+                                    };
+
+                                    gfx.mesh_pipeline.draw(
+                                        device,
+                                        cmd,
+                                        gpu.vertex_buffer.buffer,
+                                        gpu.index_buffer.buffer,
+                                        gpu.index_count,
+                                        model_matrix,
+                                        view_proj,
+                                        eye,
+                                        render_mode,
+                                        Vec4::new(0.82, 0.84, 0.88, 1.0),
+                                        0.2,
+                                        0.4,
+                                    );
+                                }
                             }
 
                             // 3. Seçili Yüzey Vurgusu ve Bounding Box (DebugDraw)
@@ -406,17 +535,23 @@ impl ApplicationHandler for App {
                             gfx.debug_draw.draw_aabb(&aabb, Vec4::new(0.4, 0.7, 1.0, 0.6));
                             gfx.debug_draw.draw_axes(&Transform::IDENTITY, 1.2);
 
-                            // Seçili yüzeyin sınır çizgilerini altın sarısı vurgula
                             if let Some(fid) = self.selected_face {
                                 let v_ids = self.active_mesh.face_vertices(fid);
                                 for i in 0..v_ids.len() {
-                                    let p0 = self.active_mesh.vertices[v_ids[i].0 as usize].position;
-                                    let p1 = self.active_mesh.vertices[v_ids[(i + 1) % v_ids.len()].0 as usize].position;
+                                    let p0 = model_matrix.transform_point3(self.active_mesh.vertices[v_ids[i].0 as usize].position);
+                                    let p1 = model_matrix.transform_point3(self.active_mesh.vertices[v_ids[(i + 1) % v_ids.len()].0 as usize].position);
                                     gfx.debug_draw.draw_line(p0, p1, Vec4::new(1.0, 0.8, 0.1, 1.0));
                                 }
                             }
 
                             gfx.debug_draw.flush(device, cmd, view_proj);
+
+                            // 4. Egui UI Arayüzünü Viewport Üzerine Çiz
+                            if let Some(editor) = &mut self.editor {
+                                if let Err(e) = editor.render(device, cmd, size.width as f32, size.height as f32) {
+                                    tracing::error!("Egui UI render hatası: {e}");
+                                }
+                            }
 
                             if let Err(err) = gfx.end_frame(frame, size.width, size.height) {
                                 tracing::error!("Kare sunum hatası: {err}");

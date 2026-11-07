@@ -1,0 +1,24 @@
+[package]
+name = "tp_ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tp_math.workspace = true
+tp_core.workspace = true
+tp_mesh.workspace = true
+tp_gfx.workspace = true
+
+ash.workspace = true
+gpu-allocator.workspace = true
+glam.workspace = true
+
+egui.workspace = true
+egui-winit.workspace = true
+winit.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+bytemuck.workspace = true
+
