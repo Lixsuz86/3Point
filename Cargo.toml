@@ -4,6 +4,7 @@ members = [
     "crates/tp_math",
     "crates/tp_core",
     "crates/tp_gfx",
+    "crates/tp_mesh",
     "crates/tp_app",
 ]
 
@@ -18,6 +19,7 @@ license = "MIT OR Apache-2.0"
 tp_math = { path = "crates/tp_math" }
 tp_core = { path = "crates/tp_core" }
 tp_gfx = { path = "crates/tp_gfx" }
+tp_mesh = { path = "crates/tp_mesh" }
 
 # Grafik Donanım Katmanı (Vulkan)
 ash = "0.38"

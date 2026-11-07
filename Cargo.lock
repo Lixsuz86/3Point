@@ -1668,6 +1668,7 @@ dependencies = [
  "tp_core",
  "tp_gfx",
  "tp_math",
+ "tp_mesh",
  "tracing",
  "winit",
 ]
@@ -1711,6 +1712,17 @@ dependencies = [
  "bytemuck",
  "glam",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tp_mesh"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "glam",
+ "thiserror 2.0.21",
+ "tp_core",
+ "tp_math",
 ]
 
 [[package]]

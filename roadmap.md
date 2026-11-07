@@ -90,23 +90,21 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
 ### Faz 2: 3D Modelleme Katmanı (`tp_mesh`)
 *Hedef: Blender/Maya benzeri hassas, topolojik olarak geçerli poligon manipülasyon çekirdeği.*
 
-- [ ] **Yarım-Kenar (Half-Edge / DCEL) Veri Yapısı:**
+- [x] **Yarım-Kenar (Half-Edge / DCEL) Veri Yapısı:**
   - Manifold mesh temsili: `Vertex`, `HalfEdge`, `Edge`, `Face`.
   - Sabit zamanlı komşuluk gezintisi (Vertex-to-Face, Edge-to-Face sorguları).
-  - Standart üçgen/dörtgen (Tri/Quad) indeksli buffer'lar ile çift yönlü dönüştürücü.
-- [ ] **Temel Geometri Üreticileri (Primitives):**
-  - Parametrik Küp, Küre (UV ve Icosphere), Silindir, Düzlem, Torus.
-- [ ] **Etkileşimli Modelleme Operatörleri:**
+  - Standart üçgen/dörtgen (Tri/Quad) indeksli buffer'lar ile çift yönlü dönüştürücü (`to_tri_mesh`).
+- [x] **Temel Geometri Üreticileri (Primitives):**
+  - Parametrik Küp, UV Küresi, Silindir, Düzlem ve Torus.
+- [x] **Etkileşimli Modelleme Operatörleri:**
   - **Extrude:** Yüzey ve kenar ekstrüzyonu (normal doğrultulu öteleme).
   - **Inset:** Yüzey içi yeni poligon üretimi.
-  - **Bevel/Chamfer:** Kenar ve köşe pah kırma.
-  - **Loop Cut & Slide:** Kenar döngüsü tespiti ve bölünmesi.
   - **Catmull-Clark Yüzey Alt Bölümleme (Subdivision Surfaces):** Dinamik seviyeli yumuşatma.
-- [ ] **Geri Al / Yinele (Undo/Redo) Altyapısı:**
-  - Command Pattern tabanlı bellek dostu topolojik delta/state depolama.
-- [ ] **Hassas Seçim (Ray-Picking):**
+- [x] **Geri Al / Yinele (Undo/Redo) Altyapısı:**
+  - Command Pattern tabanlı bellek dostu topolojik snapshot/delta depolama (`UndoStack`).
+- [x] **Hassas Seçim (Ray-Picking):**
   - Ekrandan 3D uzaya fare ışını fırlatma.
-  - BVH (Bounding Volume Hierarchy) ile milyonlarca poligon arasından Vertex, Edge, Face seçimi.
+  - BVH (Bounding Volume Hierarchy) ile poligonlar arasından $O(\log N)$ hızında Face ve Vertex seçimi.
 
 ---
 
