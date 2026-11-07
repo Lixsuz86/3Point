@@ -76,13 +76,13 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
   - Dynamic Extent, sRGB renk uzayı, V-Sync/Mailbox sunum modları ve pencere boyutu değişiminde otomatik `recreate_swapchain`.
   - CPU-GPU eşzamanlılığı için 2 Frames-in-Flight semafor ve fence yönetimi.
   - Standart RenderPass ve Framebuffer boru hattı ile stüdyo koyu arka plan render döngüsü.
-- [ ] **Ölçeklenebilir Render Hattı (Scalable Pipeline):**
+- [x] **Ölçeklenebilir Render Hattı (Scalable Pipeline):**
   - **Düşük Donanım / Modelleme Modu:** MatCap (Material Capture) ve temel yönsüz/Blinn-Phong aydınlatma.
   - **Studio PBR Modu:** Cook-Torrance BRDF (Metallic-Roughness), HDR IBL ve dinamik gölgeler.
-- [ ] **Render Graph (Frame Graph) Mimarisi:**
+- [x] **Render Graph (Frame Graph) Mimarisi:**
   - Render geçişlerinin (passes) yönlendirilmiş asiklik çizge (DAG) olarak derlenmesi.
   - Kaynakların (Texture, Buffer) otomatik bellek yeniden kullanımı ve senkronizasyon bariyerleri.
-- [ ] **Geliştirici & Hata Ayıklama Görselleştirmeleri:**
+- [x] **Geliştirici & Hata Ayıklama Görselleştirmeleri:**
   - Grid düzlemi, koordinat eksenleri, bounding box'lar ve kamera frustum tel kafesleri.
 
 ---

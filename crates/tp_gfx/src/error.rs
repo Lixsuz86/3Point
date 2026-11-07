@@ -25,3 +25,4 @@ pub enum GfxError {
     #[error("Genel grafik hatası: {0}")]
     Generic(String),
 }
+

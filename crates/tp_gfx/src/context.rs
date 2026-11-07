@@ -2,15 +2,20 @@
 
 use crate::{
     command::VulkanCommands,
+    debug_draw::VulkanDebugDraw,
+    depth::VulkanDepth,
     device::VulkanDevice,
     error::GfxError,
+    grid::VulkanGrid,
     instance::VulkanInstance,
+    mesh_pipeline::VulkanMeshPipeline,
     render_pass::VulkanRenderPass,
     surface::VulkanSurface,
     swapchain::VulkanSwapchain,
     sync::{VulkanSync, MAX_FRAMES_IN_FLIGHT},
 };
 use ash::vk;
+use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 /// Aktif bir karenin çizim durumunu temsil eden bağlam.
@@ -20,13 +25,18 @@ pub struct FrameContext {
     pub extent: vk::Extent2D,
 }
 
-/// Tüm Vulkan bileşenlerini bir araya getiren ana grafik motoru arayüzü.
+/// Tüm Vulkan bileşenlerini, boru hatlarını ve GPU bellek yöneticisini bir araya getiren ana grafik motoru arayüzü.
 pub struct GfxContext {
     pub instance: VulkanInstance,
     pub surface: VulkanSurface,
     pub device: VulkanDevice,
+    pub allocator: Allocator,
+    pub depth: VulkanDepth,
     pub swapchain: VulkanSwapchain,
     pub render_pass: VulkanRenderPass,
+    pub grid: VulkanGrid,
+    pub debug_draw: VulkanDebugDraw,
+    pub mesh_pipeline: VulkanMeshPipeline,
     pub sync: VulkanSync,
     pub commands: VulkanCommands,
     pub current_frame: usize,
@@ -34,7 +44,7 @@ pub struct GfxContext {
 }
 
 impl GfxContext {
-    /// Pencere ve ekran tutucuları üzerinden Vulkan grafik motorunu başlatır.
+    /// Pencere ve ekran tutucuları üzerinden tam teşekküllü Vulkan grafik motorunu başlatır.
     pub fn new(
         display_handle: RawDisplayHandle,
         window_handle: RawWindowHandle,
@@ -50,6 +60,16 @@ impl GfxContext {
             window_handle,
         )?;
         let device = VulkanDevice::new(&instance.instance, &surface)?;
+
+        let mut allocator = Allocator::new(&AllocatorCreateDesc {
+            instance: instance.instance.clone(),
+            device: device.device.clone(),
+            physical_device: device.physical_device,
+            debug_settings: Default::default(),
+            buffer_device_address: false,
+            allocation_sizes: Default::default(),
+        }).map_err(|e| GfxError::Generic(format!("GPU Allocator başlatılamadı: {e}")))?;
+
         let swapchain = VulkanSwapchain::new(
             &instance.instance,
             &surface,
@@ -58,23 +78,44 @@ impl GfxContext {
             height,
             None,
         )?;
+
+        let depth = VulkanDepth::new(
+            &instance.instance,
+            &device.device,
+            &mut allocator,
+            device.physical_device,
+            swapchain.extent,
+        )?;
+
         let render_pass = VulkanRenderPass::new(
             &device.device,
             swapchain.format.format,
+            depth.format,
             &swapchain.image_views,
+            depth.view,
             swapchain.extent,
         )?;
+
+        let grid = VulkanGrid::new(&device.device, render_pass.render_pass)?;
+        let debug_draw = VulkanDebugDraw::new(&device.device, &mut allocator, render_pass.render_pass)?;
+        let mesh_pipeline = VulkanMeshPipeline::new(&device.device, render_pass.render_pass)?;
+
         let sync = VulkanSync::new(&device.device)?;
         let commands = VulkanCommands::new(&device.device, device.queue_indices.graphics_family)?;
 
-        tracing::info!("3Point Vulkan Grafik Bağlamı (GfxContext) başarıyla kuruldu.");
+        tracing::info!("3Point Vulkan Grafik Bağlamı (GfxContext - Grid, Mesh, Debug) başarıyla kuruldu.");
 
         Ok(Self {
             instance,
             surface,
             device,
+            allocator,
+            depth,
             swapchain,
             render_pass,
+            grid,
+            debug_draw,
+            mesh_pipeline,
             sync,
             commands,
             current_frame: 0,
@@ -83,23 +124,20 @@ impl GfxContext {
     }
 
     /// Yeni bir karenin çizimini başlatır.
-    ///
-    /// Swapchain ekran boyutuyla uyumsuz hale gelmişse `None` döner ve swapchain'i yeniler.
     pub fn begin_frame(&mut self, width: u32, height: u32) -> Result<Option<FrameContext>, GfxError> {
         if width == 0 || height == 0 {
-            return Ok(None); // Pencere simge durumuna küçültülmüş
+            return Ok(None);
         }
 
         let fence = self.sync.in_flight_fences[self.current_frame];
 
-        // SAFETY: Önceki karenin GPU tarafında tamamlanmasını bekle (1 saniye zaman aşımı).
+        // SAFETY: Önceki karenin tamamlanmasını bekle.
         unsafe {
             self.device
                 .device
                 .wait_for_fences(&[fence], true, 1_000_000_000)?;
         }
 
-        // Sıradaki swapchain görüntüsünü iste
         let image_available_semaphore = self.sync.image_available_semaphores[self.current_frame];
         let acquire_result = unsafe {
             self.swapchain.loader.acquire_next_image(
@@ -132,7 +170,7 @@ impl GfxContext {
 
         let cmd = self.commands.buffers[self.current_frame];
 
-        // SAFETY: Komut tamponunu sıfırla ve kayda başla.
+        // SAFETY: Komut tamponunu kayda hazırla.
         unsafe {
             self.device
                 .device
@@ -142,12 +180,19 @@ impl GfxContext {
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
             self.device.device.begin_command_buffer(cmd, &begin_info)?;
 
-            // 3Point Stüdyo Koyu Arka Plan Rengi: [0.12, 0.13, 0.15, 1.0]
-            let clear_value = vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.12, 0.13, 0.15, 1.0],
+            let clear_values = [
+                vk::ClearValue {
+                    color: vk::ClearColorValue {
+                        float32: [0.12, 0.13, 0.15, 1.0],
+                    },
                 },
-            };
+                vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue {
+                        depth: 1.0,
+                        stencil: 0,
+                    },
+                },
+            ];
 
             let render_pass_begin = vk::RenderPassBeginInfo::default()
                 .render_pass(self.render_pass.render_pass)
@@ -156,13 +201,29 @@ impl GfxContext {
                     offset: vk::Offset2D { x: 0, y: 0 },
                     extent: self.swapchain.extent,
                 })
-                .clear_values(std::slice::from_ref(&clear_value));
+                .clear_values(&clear_values);
 
             self.device.device.cmd_begin_render_pass(
                 cmd,
                 &render_pass_begin,
                 vk::SubpassContents::INLINE,
             );
+
+            // Dinamik Viewport ve Scissor ayarları
+            let viewport = vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: self.swapchain.extent.width as f32,
+                height: self.swapchain.extent.height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            };
+            let scissor = vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain.extent,
+            };
+            self.device.device.cmd_set_viewport(cmd, 0, &[viewport]);
+            self.device.device.cmd_set_scissor(cmd, 0, &[scissor]);
         }
 
         Ok(Some(FrameContext {
@@ -172,7 +233,7 @@ impl GfxContext {
         }))
     }
 
-    /// Kare çizimini sonlandırır, komutları kuyruğa gönderir ve ekrana sunar.
+    /// Kare çizimini sonlandırır, kuyruğa gönderir ve ekrana sunar.
     pub fn end_frame(&mut self, frame: FrameContext, width: u32, height: u32) -> Result<(), GfxError> {
         let cmd = frame.command_buffer;
 
@@ -229,19 +290,18 @@ impl GfxContext {
             Err(e) => return Err(GfxError::VkResult(e)),
         }
 
-        // Bir sonraki kare döngüsüne ilerle
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
         Ok(())
     }
 
-    /// Ekran boyutu değiştiğinde Swapchain ve Framebuffer nesnelerini sıfırlar.
+    /// Ekran boyutu değiştiğinde Swapchain, Derinlik ve Framebuffer nesnelerini yeniler.
     pub fn recreate_swapchain(&mut self, width: u32, height: u32) -> Result<(), GfxError> {
         if width == 0 || height == 0 {
             return Ok(());
         }
 
-        // SAFETY: Mevcut çizimlerin tamamlanmasını bekle.
+        // SAFETY: Çizimlerin tamamlanmasını bekle.
         unsafe {
             self.device.device.device_wait_idle()?;
         }
@@ -250,6 +310,7 @@ impl GfxContext {
 
         let old_swapchain = self.swapchain.swapchain;
         self.swapchain.destroy_image_views(&self.device.device);
+        self.depth.destroy(&self.device.device, &mut self.allocator);
 
         let new_swapchain = VulkanSwapchain::new(
             &self.instance.instance,
@@ -260,27 +321,36 @@ impl GfxContext {
             Some(old_swapchain),
         )?;
 
-        // SAFETY: Eski swapchain'i yok et.
+        // SAFETY: Eski swapchain yok edilir.
         unsafe {
             self.swapchain.loader.destroy_swapchain(old_swapchain, None);
         }
 
         self.swapchain = new_swapchain;
 
+        self.depth = VulkanDepth::new(
+            &self.instance.instance,
+            &self.device.device,
+            &mut self.allocator,
+            self.device.physical_device,
+            self.swapchain.extent,
+        )?;
+
         self.render_pass.framebuffers = VulkanRenderPass::create_framebuffers(
             &self.device.device,
             self.render_pass.render_pass,
             &self.swapchain.image_views,
+            self.depth.view,
             self.swapchain.extent,
         )?;
 
         self.framebuffer_resized = false;
-        tracing::info!("Swapchain {}x{} boyutuyla yeniden oluşturuldu.", width, height);
+        tracing::info!("Swapchain & Derinlik {}x{} boyutuyla yenilendi.", width, height);
 
         Ok(())
     }
 
-    /// Pencere yeniden boyutlandırıldığında çağrılır.
+    /// Pencere boyutu değiştiğinde çağrılır.
     #[inline]
     pub fn notify_resize(&mut self) {
         self.framebuffer_resized = true;
@@ -294,6 +364,10 @@ impl Drop for GfxContext {
             let _ = self.device.device.device_wait_idle();
         }
 
+        self.mesh_pipeline.destroy(&self.device.device);
+        self.debug_draw.destroy(&self.device.device, &mut self.allocator);
+        self.grid.destroy(&self.device.device);
+        self.depth.destroy(&self.device.device, &mut self.allocator);
         self.commands.destroy(&self.device.device);
         self.sync.destroy(&self.device.device);
         self.render_pass.destroy(&self.device.device);

@@ -23,6 +23,7 @@ tp_gfx = { path = "crates/tp_gfx" }
 ash = "0.38"
 ash-window = "0.13"
 gpu-allocator = { version = "0.27", default-features = false, features = ["vulkan"] }
+naga = { version = "23", features = ["wgsl-in", "spv-out"] }
 
 # Matematik & Bellek Hizalaması
 glam = { version = "0.29", default-features = true }
