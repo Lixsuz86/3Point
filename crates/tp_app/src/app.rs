@@ -17,6 +17,9 @@ use tp_mesh::{
     topology::FaceId,
     UndoStack,
 };
+use tp_anim::{
+    AnimationClip, AnimationCurve, AnimationPlayer, BoneTrack, Interpolation, Keyframe, Skeleton,
+};
 use tp_ui::{Editor, EditorEvent, EditorSceneContext, ShadingMode};
 use winit::{
     application::ApplicationHandler,
@@ -64,6 +67,13 @@ pub struct App {
     is_orbiting: bool,
     is_panning: bool,
     last_mouse_pos: Option<(f64, f64)>,
+
+    // Animasyon Sistemi (Faz 4: tp_anim)
+    skeleton: Skeleton,
+    anim_player: AnimationPlayer,
+    bone_world_transforms: Vec<Mat4>,
+    skinning_matrices: Vec<Mat4>,
+    anim_duration: f32,
 }
 
 impl Default for App {
@@ -84,6 +94,35 @@ impl App {
             "3Point App nesnesi başlatılıyor (İş parçacığı havuzu: {} çekirdek)...",
             task_pool.num_threads()
         );
+
+        // Örnek Karakter İskeleti (Armature)
+        let mut skeleton = Skeleton::new();
+        let root_bone = skeleton
+            .add_bone("Root", None, Transform::from_translation(Vec3::new(0.0, -0.75, 0.0)))
+            .unwrap_or(tp_anim::BoneId(0));
+        let spine_bone = skeleton
+            .add_bone("Spine", Some(root_bone), Transform::from_translation(Vec3::new(0.0, 0.75, 0.0)))
+            .unwrap_or(tp_anim::BoneId(1));
+        let _head_bone = skeleton
+            .add_bone("Head", Some(spine_bone), Transform::from_translation(Vec3::new(0.0, 0.75, 0.0)))
+            .unwrap_or(tp_anim::BoneId(2));
+
+        let bone_count = skeleton.bone_count();
+        let bone_world_transforms = vec![Mat4::IDENTITY; bone_count];
+        let skinning_matrices = vec![Mat4::IDENTITY; bone_count];
+
+        // Örnek Animasyon Klibi (Swaying / Idle)
+        let mut clip = AnimationClip::new("Idle_Sway", 3.0).unwrap();
+        let mut spine_track = BoneTrack::new(spine_bone);
+        let mut spine_rot = AnimationCurve::new(Interpolation::Linear);
+        spine_rot.add_keyframe(Keyframe::new(0.0, Quat::from_rotation_z(-0.15)));
+        spine_rot.add_keyframe(Keyframe::new(1.5, Quat::from_rotation_z(0.15)));
+        spine_rot.add_keyframe(Keyframe::new(3.0, Quat::from_rotation_z(-0.15)));
+        spine_track.rotation = Some(spine_rot);
+        clip.add_track(spine_track);
+
+        let mut anim_player = AnimationPlayer::new();
+        anim_player.play(clip, true);
 
         Self {
             window: None,
@@ -106,6 +145,11 @@ impl App {
             is_orbiting: false,
             is_panning: false,
             last_mouse_pos: None,
+            skeleton,
+            anim_player,
+            bone_world_transforms,
+            skinning_matrices,
+            anim_duration: 3.0,
         }
     }
 
@@ -397,6 +441,13 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 self.time.update();
+                let dt = self.time.delta_seconds();
+
+                // Animasyon Oynatıcısını ve İskelet Matrislerini Güncelle
+                let mut local_poses = vec![Transform::IDENTITY; self.skeleton.bone_count()];
+                self.anim_player.update(dt, &self.skeleton, &mut local_poses);
+                let _ = self.skeleton.compute_world_transforms(&local_poses, &mut self.bone_world_transforms);
+                let _ = self.skeleton.compute_skinning_matrices(&self.bone_world_transforms, &mut self.skinning_matrices);
 
                 let Some(window) = self.window.clone() else { return };
                 let size = window.inner_size();
@@ -413,6 +464,11 @@ impl ApplicationHandler for App {
                         edge_count: self.active_mesh.edges.len(),
                         face_count: self.active_mesh.faces.len(),
                         selected_face: self.selected_face,
+                        anim_time: &mut self.anim_player.current_time,
+                        anim_duration: self.anim_duration,
+                        anim_speed: &mut self.anim_player.speed,
+                        anim_is_playing: self.anim_player.is_playing,
+                        anim_looping: &mut self.anim_player.looping,
                     };
                     editor.update(&window, &mut scene_ctx)
                 } else {
@@ -422,6 +478,10 @@ impl ApplicationHandler for App {
                 // UI Buton Olaylarını İşle
                 if let Some(event) = editor_event {
                     match event {
+                        EditorEvent::PlayAnimation => self.anim_player.resume(),
+                        EditorEvent::PauseAnimation => self.anim_player.pause(),
+                        EditorEvent::StopAnimation => self.anim_player.stop(),
+                        EditorEvent::ScrubAnimation(t) => self.anim_player.current_time = t,
                         EditorEvent::Extrude(dist) => {
                             if let Some(fid) = self.selected_face {
                                 let cmd = SnapshotMeshCommand::new("Extrude Face", move |m| {
@@ -541,6 +601,21 @@ impl ApplicationHandler for App {
                                     let p0 = model_matrix.transform_point3(self.active_mesh.vertices[v_ids[i].0 as usize].position);
                                     let p1 = model_matrix.transform_point3(self.active_mesh.vertices[v_ids[(i + 1) % v_ids.len()].0 as usize].position);
                                     gfx.debug_draw.draw_line(p0, p1, Vec4::new(1.0, 0.8, 0.1, 1.0));
+                                }
+                            }
+
+                            // İskelet Kemikleri Görselleştirmesi (Skeleton Debug Draw)
+                            for i in 0..self.skeleton.bone_count() {
+                                let bone = &self.skeleton.bones[i];
+                                let bone_world_pos = model_matrix.transform_point3(
+                                    self.bone_world_transforms[i].transform_point3(Vec3::ZERO),
+                                );
+                                if let Some(parent_id) = bone.parent {
+                                    let parent_pos = model_matrix.transform_point3(
+                                        self.bone_world_transforms[parent_id.0 as usize].transform_point3(Vec3::ZERO),
+                                    );
+                                    // Kemik segmenti (Parlak Turuncu/Altın)
+                                    gfx.debug_draw.draw_line(parent_pos, bone_world_pos, Vec4::new(1.0, 0.75, 0.2, 1.0));
                                 }
                             }
 

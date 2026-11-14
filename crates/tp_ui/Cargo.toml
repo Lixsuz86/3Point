@@ -9,6 +9,7 @@ license.workspace = true
 tp_math.workspace = true
 tp_core.workspace = true
 tp_mesh.workspace = true
+tp_anim.workspace = true
 tp_gfx.workspace = true
 
 ash.workspace = true

@@ -2,8 +2,9 @@
 
 use crate::{
     panels::{
-        render_inspector, render_outliner, render_toolbox, render_top_menu, InspectorAction,
-        InspectorData, MenuAction, SceneObject, ShadingMode, StudioMode, ToolAction, TransformTool,
+        render_inspector, render_outliner, render_timeline, render_toolbox, render_top_menu,
+        InspectorAction, InspectorData, MenuAction, SceneObject, ShadingMode, StudioMode,
+        TimelineAction, TimelineData, ToolAction, TransformTool,
     },
     theme::apply_studio_theme,
     vulkan_render::EguiVulkanRenderer,
@@ -26,6 +27,10 @@ pub enum EditorEvent {
     Undo,
     Redo,
     AddPrimitive(&'static str),
+    PlayAnimation,
+    PauseAnimation,
+    StopAnimation,
+    ScrubAnimation(f32),
 }
 
 /// Editör arayüz güncellemesine sahneden aktarılan durum verileri.
@@ -37,6 +42,11 @@ pub struct EditorSceneContext<'a> {
     pub edge_count: usize,
     pub face_count: usize,
     pub selected_face: Option<FaceId>,
+    pub anim_time: &'a mut f32,
+    pub anim_duration: f32,
+    pub anim_speed: &'a mut f32,
+    pub anim_is_playing: bool,
+    pub anim_looping: &'a mut bool,
 }
 
 /// Tüm editör panellerini, giriş olaylarını ve egui durumunu yöneten yapı.
@@ -195,6 +205,30 @@ impl Editor {
                         InspectorAction::Extrude(d) => triggered_event = Some(EditorEvent::Extrude(d)),
                         InspectorAction::Inset(f) => triggered_event = Some(EditorEvent::Inset(f)),
                         InspectorAction::Subdivide => triggered_event = Some(EditorEvent::Subdivide),
+                    }
+                }
+            });
+
+        // 4. Alt Panel: Animasyon Zaman Çizelgesi (Timeline & Dopesheet)
+        TopBottomPanel::bottom("bottom_timeline_panel")
+            .resizable(false)
+            .default_height(36.0)
+            .show(&self.egui_ctx, |ui| {
+                let timeline_data = TimelineData {
+                    current_time: scene.anim_time,
+                    duration: scene.anim_duration,
+                    speed: scene.anim_speed,
+                    is_playing: scene.anim_is_playing,
+                    looping: scene.anim_looping,
+                    fps: 30,
+                };
+                if let Some(timeline_action) = render_timeline(ui, timeline_data) {
+                    match timeline_action {
+                        TimelineAction::Play => triggered_event = Some(EditorEvent::PlayAnimation),
+                        TimelineAction::Pause => triggered_event = Some(EditorEvent::PauseAnimation),
+                        TimelineAction::Stop => triggered_event = Some(EditorEvent::StopAnimation),
+                        TimelineAction::Scrub(t) => triggered_event = Some(EditorEvent::ScrubAnimation(t)),
+                        TimelineAction::AddKeyframe => {}
                     }
                 }
             });

@@ -1,0 +1,16 @@
+[package]
+name = "tp_anim"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "3Point Karakter & Nesne Animasyon Sistemi, İskelet, Skinning ve IK Motoru"
+
+[dependencies]
+tp_math.workspace = true
+tp_core.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+

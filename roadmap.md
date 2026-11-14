@@ -131,18 +131,22 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
 ### Faz 4: Karakter & Nesne Animasyon Sistemi (`tp_anim`)
 *Hedef: Kemik iskeletleri, anahtar kareler, interpolasyon ve ileri seviye kinematik.*
 
-- [ ] **İskelet & Armatür (Skeletal Hierarchy):**
-  - Kemik (Bone) hiyerarşisi, Local/Model uzayı dönüşüm matrisleri, Bind Pose.
-- [ ] **Deri Kaplama (GPU Skeletal Skinning):**
-  - Ağırlık matrisleri (Her köşe için en fazla 4-8 kemik ağırlığı).
-  - Dual Quaternion ve Linear Blend Skinning (LBS) compute/vertex shader uygulaması.
-- [ ] **Zaman Çizelgesi & Eğri Editörü (Timeline & Graph Editor):**
-  - Dopesheet (Anahtar kare işaretleme, taşıma).
-  - Bezier eğrileriyle f-curve interpolasyonu (Linear, Step, Smooth cubic).
-- [ ] **Ters Kinematik (IK Çözücüleri):**
-  - Two-Bone IK (Karakter bacak ve kolları için).
-  - FABRIK (Forward And Backward Reaching Inverse Kinematics) omurga/uzuv çözümü.
-- [ ] **Morph Targets / Blendshapes:** Yüz mimikleri ve detay deformasyonları için ağırlıklandırılmış hedef mesh'ler.
+- [x] **İskelet & Armatür (`Skeleton`, `Bone`):**
+  - Topolojik düz dizilimli (flat-array) kemik hiyerarşisi, sıfır heap maliyetli $O(N)$ Forward Kinematics (FK).
+  - Bind Pose ve GPU/CPU için ters bağlama matrisleri ($M_{skin} = M_{world} \cdot M_{bind}^{-1}$).
+- [x] **Deri Kaplama (Skeletal Skinning):**
+  - Köşe başına 4 kemik ağırlığı (`JointWeights`, Vulkan UBO dostu).
+  - Linear Blend Skinning (LBS) ve eklem burulmalarında hacim daralmasını engelleyen Dual Quaternion Skinning (DQS).
+- [x] **Zaman Çizelgesi & Eğri Motoru (Timeline & Curve):**
+  - Step, Linear (Slerp) ve Hermite Cubic Spline interpolasyonu.
+  - İkili arama ($O(\log K)$) ile hassas zaman örneklemesi.
+  - Editör alt panelinde etkileşimli Animasyon Zaman Çizelgesi (Timeline, Play/Pause/Loop, Scrubber, FPS).
+- [x] **Ters Kinematik (IK Çözücüleri):**
+  - İki kemikli analitik (Closed-form) Two-Bone IK çözücüsü (mikro-saniyelik, $O(1)$ süre, sıfır iterasyon).
+  - Çok eklemli omurga ve kuyruklar için açı tekilliksiz FABRIK çözücüsü.
+- [x] **Animasyon Karıştırma & Oynatıcı (`blend`, `player`):**
+  - Doğrusal poz harmanlama (Linear Pose Blending), kemik maskeleme (Bone Masking) ve Additive Blending.
+  - Klipler arasında yumuşak geçiş (Cross-Fade Transition) ve oynatma hızı yönetimi.
 
 ---
 

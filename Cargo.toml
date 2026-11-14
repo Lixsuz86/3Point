@@ -6,6 +6,7 @@ members = [
     "crates/tp_gfx",
     "crates/tp_mesh",
     "crates/tp_ui",
+    "crates/tp_anim",
     "crates/tp_app",
 ]
 
@@ -22,6 +23,7 @@ tp_core = { path = "crates/tp_core" }
 tp_gfx = { path = "crates/tp_gfx" }
 tp_mesh = { path = "crates/tp_mesh" }
 tp_ui = { path = "crates/tp_ui" }
+tp_anim = { path = "crates/tp_anim" }
 
 # GUI & Editör Katmanı
 egui = "0.29"
