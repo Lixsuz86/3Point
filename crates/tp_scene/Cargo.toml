@@ -1,0 +1,18 @@
+[package]
+name = "tp_scene"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "3Point Sahne Yönetimi, Arketip Tabanlı ECS ve Oyun Döngüsü"
+
+[dependencies]
+tp_math.workspace = true
+tp_core.workspace = true
+tp_mesh.workspace = true
+tp_anim.workspace = true
+tp_physics.workspace = true
+hecs.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

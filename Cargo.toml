@@ -7,6 +7,8 @@ members = [
     "crates/tp_mesh",
     "crates/tp_ui",
     "crates/tp_anim",
+    "crates/tp_physics",
+    "crates/tp_scene",
     "crates/tp_app",
 ]
 
@@ -24,6 +26,8 @@ tp_gfx = { path = "crates/tp_gfx" }
 tp_mesh = { path = "crates/tp_mesh" }
 tp_ui = { path = "crates/tp_ui" }
 tp_anim = { path = "crates/tp_anim" }
+tp_physics = { path = "crates/tp_physics" }
+tp_scene = { path = "crates/tp_scene" }
 
 # GUI & Editör Katmanı
 egui = "0.29"
@@ -50,6 +54,12 @@ anyhow = "1.0"
 
 # Eşzamanlılık & Görev Havuzları
 rayon = "1.10"
+
+# ECS & Sahne Yönetimi
+hecs = "0.10"
+
+# Fizik Motoru
+rapier3d = { version = "0.22", features = ["dim3"] }
 parking_lot = "0.12"
 crossbeam-channel = "0.5"
 

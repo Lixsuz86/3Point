@@ -15,6 +15,8 @@ tp_core.workspace = true
 tp_gfx.workspace = true
 tp_mesh.workspace = true
 tp_anim.workspace = true
+tp_physics.workspace = true
+tp_scene.workspace = true
 tp_ui.workspace = true
 
 winit.workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "tp_physics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "3Point 3D Fizik Motoru, Rijit Cisimler, Çarpışma ve Raycast Simülasyonu"
+
+[dependencies]
+tp_math.workspace = true
+tp_core.workspace = true
+glam.workspace = true
+rapier3d.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -31,6 +31,9 @@ pub enum EditorEvent {
     PauseAnimation,
     StopAnimation,
     ScrubAnimation(f32),
+    PlayGame,
+    PauseGame,
+    StopGame,
 }
 
 /// Editör arayüz güncellemesine sahneden aktarılan durum verileri.
@@ -143,6 +146,9 @@ impl Editor {
                     MenuAction::AddSphere => triggered_event = Some(EditorEvent::AddPrimitive("Sphere")),
                     MenuAction::AddCylinder => triggered_event = Some(EditorEvent::AddPrimitive("Cylinder")),
                     MenuAction::AddPlane => triggered_event = Some(EditorEvent::AddPrimitive("Plane")),
+                    MenuAction::PlayGame => triggered_event = Some(EditorEvent::PlayGame),
+                    MenuAction::PauseGame => triggered_event = Some(EditorEvent::PauseGame),
+                    MenuAction::StopGame => triggered_event = Some(EditorEvent::StopGame),
                     _ => {}
                 }
             }

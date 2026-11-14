@@ -95,3 +95,4 @@ pub fn render_timeline(ui: &mut Ui, data: TimelineData<'_>) -> Option<TimelineAc
 
     action
 }
+

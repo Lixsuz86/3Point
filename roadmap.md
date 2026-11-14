@@ -153,18 +153,20 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
 ### Faz 5: Oyun Motoru Runtime & ECS (`tp_scene`, `tp_physics`)
 *Hedef: Modellemeden bağımsız canlı oyun mantığı, bileşen tabanlı sahne ve fizik simülasyonu.*
 
-- [ ] **Varlık Bileşen Sistemi (ECS):**
-  - Yüksek verimli arketip tabanlı veri yönelimli mimari (`hecs` veya `bevy_ecs`).
-  - Temel Bileşenler: `Transform`, `MeshRenderer`, `Camera`, `Light`, `RigidBody`, `Collider`.
-- [ ] **Fizik Entegrasyonu (`rapier3d`):**
-  - Statik, Dinamik ve Kinematik gövdeler.
-  - Mesh Collider, Convex Hull, Kapsül/Kutu ilkel çarpıştırıcılar.
-  - Karakter kontrolcüsü (Kinematic Character Controller).
-- [ ] **Varlık Yönetimi (Asset Pipeline):**
-  - glTF 2.0 / GLB yükleme ve dışa aktarma (Mesh, Skeletal, Animation, PBR Materyalleri).
-  - Motorun kendi optimize edilmiş ikili (binary) formatı (`.3p`).
-- [ ] **Canlı Oynatma (Play/Pause/Step Mode):**
-  - Editör modundan sıfır maliyetle oyun simülasyonuna geçiş; sahne durumunun bellekte dondurulması/geri yüklenmesi.
+- [x] **Varlık Bileşen Sistemi (ECS - `hecs`):**
+  - Düşük donanımlı sistemler ve başlangıç seviyesi PC'ler için ultra hafif, hızlı ve yüksek önbellek dostu arketip mimarisi.
+  - Temel Bileşenler: `Name`, `TransformComponent`, `GlobalTransform`, `Hierarchy`, `MeshRenderer`, `CameraComponent`, `LightComponent`, `PhysicsBodyComponent`, `PhysicsColliderComponent`.
+- [x] **3D Fizik Motoru Entegrasyonu (`tp_physics`, `rapier3d`):**
+  - Dinamik, Statik (Fixed) ve Kinematik hareket modelleri (`RigidBodyDesc`).
+  - Kutu, Küre, Kapsül, Silindir ve Üçgen Ağ (TriMesh) çarpıştırıcıları (`ColliderDesc`).
+  - Yerçekimi, sürtünme, sekme (restitution), itme (impulse) ve hızlandırılmış Raycast ışın testleri.
+- [x] **Sahne Grafiği & Yaşam Döngüsü (Scene Graph & Lifecycle):**
+  - Stack tabanlı, sıfır heap maliyetli Parent-Child hiyerarşik dönüşüm yayılımı ($M_{global} = M_{parent} \cdot M_{child}$).
+  - Canlı Motor Çalışma Durumları: `Edit`, `Play`, `Pause`.
+  - Snapshot & Restore: Play moduna girildiğinde sahne dönüşümlerini donduran ve Stop edildiğinde tüm sahneyi orijinal düzenleme anına hatasız geri yükleyen güvenlik mekanizması.
+- [x] **UI & Runtime Entegrasyonu:**
+  - DCC editör üst menüsünde Oyun Testi modu ve canlı çalışma butonları (`▶ PLAY`, `⏸ PAUSE`, `⏹ STOP`).
+  - Viewport döngüsünde 60 FPS eşzamanlı fizik ve hiyerarşi güncellemesi.
 
 ---
 

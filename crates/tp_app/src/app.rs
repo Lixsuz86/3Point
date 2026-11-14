@@ -20,6 +20,7 @@ use tp_mesh::{
 use tp_anim::{
     AnimationClip, AnimationCurve, AnimationPlayer, BoneTrack, Interpolation, Keyframe, Skeleton,
 };
+use tp_scene::{CameraComponent, LightComponent, Scene};
 use tp_ui::{Editor, EditorEvent, EditorSceneContext, ShadingMode};
 use winit::{
     application::ApplicationHandler,
@@ -74,6 +75,9 @@ pub struct App {
     bone_world_transforms: Vec<Mat4>,
     skinning_matrices: Vec<Mat4>,
     anim_duration: f32,
+
+    // Sahne & Oyun Motoru (Faz 5: tp_scene)
+    scene: Scene,
 }
 
 impl Default for App {
@@ -124,6 +128,12 @@ impl App {
         let mut anim_player = AnimationPlayer::new();
         anim_player.play(clip, true);
 
+        // Sahne Grafiği ve Varsayılan Varlıklar (Faz 5: tp_scene)
+        let mut scene = Scene::new();
+        scene.spawn_mesh("Default Cube", Transform::IDENTITY, "Cube", Vec4::new(0.82, 0.84, 0.88, 1.0));
+        scene.spawn_camera("Main Camera", Transform::from_translation(Vec3::new(0.0, 2.0, 6.0)), CameraComponent::default());
+        scene.spawn_light("Directional Light", Transform::from_translation(Vec3::new(5.0, 10.0, 5.0)), LightComponent::default());
+
         Self {
             window: None,
             gfx: None,
@@ -150,6 +160,7 @@ impl App {
             bone_world_transforms,
             skinning_matrices,
             anim_duration: 3.0,
+            scene,
         }
     }
 
@@ -443,7 +454,10 @@ impl ApplicationHandler for App {
                 self.time.update();
                 let dt = self.time.delta_seconds();
 
-                // Animasyon Oynatıcısını ve İskelet Matrislerini Güncelle
+                // Sahne ECS & Fizik Simülasyonu Güncelle (Faz 5)
+                self.scene.update(dt);
+
+                // Animasyon Oynatıcısını ve İskelet Matrislerini Güncelle (Faz 4)
                 let mut local_poses = vec![Transform::IDENTITY; self.skeleton.bone_count()];
                 self.anim_player.update(dt, &self.skeleton, &mut local_poses);
                 let _ = self.skeleton.compute_world_transforms(&local_poses, &mut self.bone_world_transforms);
@@ -478,6 +492,9 @@ impl ApplicationHandler for App {
                 // UI Buton Olaylarını İşle
                 if let Some(event) = editor_event {
                     match event {
+                        EditorEvent::PlayGame => self.scene.start_play(),
+                        EditorEvent::PauseGame => self.scene.pause_play(),
+                        EditorEvent::StopGame => self.scene.stop_play(),
                         EditorEvent::PlayAnimation => self.anim_player.resume(),
                         EditorEvent::PauseAnimation => self.anim_player.pause(),
                         EditorEvent::StopAnimation => self.anim_player.stop(),

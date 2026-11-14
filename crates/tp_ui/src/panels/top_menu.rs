@@ -32,6 +32,9 @@ pub enum MenuAction {
     Undo,
     Redo,
     ToggleGrid,
+    PlayGame,
+    PauseGame,
+    StopGame,
 }
 
 /// Üst menü çubuğunu render eder.
@@ -100,6 +103,28 @@ pub fn render_top_menu(
         ui.selectable_value(current_mode, StudioMode::Sculpt, "🎨 Heykeltıraş");
         ui.selectable_value(current_mode, StudioMode::Animation, "🎬 Animasyon");
         ui.selectable_value(current_mode, StudioMode::GameRuntime, "🎮 Oyun Testi");
+
+        if *current_mode == StudioMode::GameRuntime {
+            ui.separator();
+            if ui
+                .button(RichText::new("▶ PLAY").strong().color(Color32::from_rgb(74, 222, 128)))
+                .clicked()
+            {
+                triggered_action = Some(MenuAction::PlayGame);
+            }
+            if ui
+                .button(RichText::new("⏸ PAUSE").strong().color(Color32::from_rgb(250, 204, 21)))
+                .clicked()
+            {
+                triggered_action = Some(MenuAction::PauseGame);
+            }
+            if ui
+                .button(RichText::new("⏹ STOP").strong().color(Color32::from_rgb(248, 113, 113)))
+                .clicked()
+            {
+                triggered_action = Some(MenuAction::StopGame);
+            }
+        }
 
         // Sağ tarafta Görselleştirme Modları (Shading)
         ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
