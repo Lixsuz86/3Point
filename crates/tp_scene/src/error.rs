@@ -14,3 +14,4 @@ pub enum SceneError {
     #[error("Bileşen eksik veya bulunamadı: {0}")]
     ComponentMissing(&'static str),
 }
+

@@ -6,11 +6,12 @@ use tp_core::{TaskPool, Time};
 use tp_gfx::{GfxContext, GpuBuffer};
 use tp_math::{
     glam::{EulerRot, Mat4, Quat},
-    Transform, Vec3, Vec4,
+    Frustum, Transform, Vec3, Vec4,
 };
 use tp_mesh::{
     bvh::MeshBvh,
     create_cube, create_cylinder, create_plane, create_uv_sphere,
+    export_3p, export_obj,
     history::SnapshotMeshCommand,
     mesh::HalfEdgeMesh,
     picking::pick_face,
@@ -20,7 +21,10 @@ use tp_mesh::{
 use tp_anim::{
     AnimationClip, AnimationCurve, AnimationPlayer, BoneTrack, Interpolation, Keyframe, Skeleton,
 };
-use tp_scene::{CameraComponent, LightComponent, Scene};
+use tp_scene::{
+    create_character_scene, create_empty_scene, create_physics_sandbox, CameraComponent,
+    LightComponent, Scene,
+};
 use tp_ui::{Editor, EditorEvent, EditorSceneContext, ShadingMode};
 use winit::{
     application::ApplicationHandler,
@@ -78,6 +82,12 @@ pub struct App {
 
     // Sahne & Oyun Motoru (Faz 5: tp_scene)
     scene: Scene,
+
+    // Performans ve Optimizasyon (Faz 6)
+    low_end_mode: bool,
+    is_culled: bool,
+    fps: f32,
+    frame_time_ms: f32,
 }
 
 impl Default for App {
@@ -161,6 +171,10 @@ impl App {
             skinning_matrices,
             anim_duration: 3.0,
             scene,
+            low_end_mode: false,
+            is_culled: false,
+            fps: 60.0,
+            frame_time_ms: 16.6,
         }
     }
 
@@ -453,6 +467,8 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 self.time.update();
                 let dt = self.time.delta_seconds();
+                self.fps = 1.0 / dt.max(1e-4);
+                self.frame_time_ms = dt * 1000.0;
 
                 // Sahne ECS & Fizik Simülasyonu Güncelle (Faz 5)
                 self.scene.update(dt);
@@ -466,7 +482,23 @@ impl ApplicationHandler for App {
                 let Some(window) = self.window.clone() else { return };
                 let size = window.inner_size();
                 let (view, proj, eye) = self.compute_camera_matrices(size.width, size.height);
+                let view_proj = proj * view;
+                let inv_view_proj = view_proj.inverse();
                 let model_matrix = self.compute_model_matrix();
+
+                // Görüş Hacmi Testi (Frustum Culling - Faz 6)
+                let rot_quat = Quat::from_euler(
+                    EulerRot::XYZ,
+                    self.mesh_rotation.x.to_radians(),
+                    self.mesh_rotation.y.to_radians(),
+                    self.mesh_rotation.z.to_radians(),
+                );
+                let mesh_transform = Transform::from_trs(self.mesh_position, rot_quat, self.mesh_scale);
+                let aabb = self.active_mesh.compute_aabb();
+                let world_aabb = aabb.transformed(&mesh_transform);
+                let frustum = Frustum::from_view_projection(view_proj);
+                let is_visible = frustum.intersects_aabb(&world_aabb);
+                self.is_culled = !is_visible;
 
                 // 2. UI Güncellemesi (Tessellation)
                 let editor_event = if let Some(editor) = &mut self.editor {
@@ -483,6 +515,10 @@ impl ApplicationHandler for App {
                         anim_speed: &mut self.anim_player.speed,
                         anim_is_playing: self.anim_player.is_playing,
                         anim_looping: &mut self.anim_player.looping,
+                        fps: self.fps,
+                        frame_time_ms: self.frame_time_ms,
+                        is_culled: self.is_culled,
+                        low_end_mode: &mut self.low_end_mode,
                     };
                     editor.update(&window, &mut scene_ctx)
                 } else {
@@ -492,6 +528,17 @@ impl ApplicationHandler for App {
                 // UI Buton Olaylarını İşle
                 if let Some(event) = editor_event {
                     match event {
+                        EditorEvent::LoadEmptyScene => self.scene = create_empty_scene(),
+                        EditorEvent::LoadCharacterScene => self.scene = create_character_scene(),
+                        EditorEvent::LoadPhysicsScene => self.scene = create_physics_sandbox(),
+                        EditorEvent::ExportObj => {
+                            let obj = export_obj(&self.active_mesh, "ExportedModel");
+                            tracing::info!("Model Wavefront OBJ olarak hazırlandı ({} bayt)", obj.len());
+                        }
+                        EditorEvent::Export3P => {
+                            let bin = export_3p(&self.active_mesh);
+                            tracing::info!("Model 3P İkili formatında hazırlandı ({} bayt)", bin.len());
+                        }
                         EditorEvent::PlayGame => self.scene.start_play(),
                         EditorEvent::PauseGame => self.scene.pause_play(),
                         EditorEvent::StopGame => self.scene.stop_play(),
@@ -567,9 +614,6 @@ impl ApplicationHandler for App {
 
                 // 3. Vulkan Çizim Döngüsü
                 if let Some(gfx) = &mut self.gfx {
-                    let view_proj = proj * view;
-                    let inv_view_proj = view_proj.inverse();
-
                     match gfx.begin_frame(size.width, size.height) {
                         Ok(Some(frame)) => {
                             let cmd = frame.command_buffer;
@@ -578,11 +622,11 @@ impl ApplicationHandler for App {
                             // 1. Zemin Izgarası (Infinite Grid)
                             gfx.grid.draw(device, cmd, inv_view_proj, eye, 0.1, 1000.0);
 
-                            // 2. 3D Model Çizimi
+                            // 2. 3D Model Çizimi (Frustum Culling korumalı)
                             let mesh_visible = self.editor.as_ref().is_none_or(|e| e.mesh_visible);
                             let shading_mode = self.editor.as_ref().map_or(ShadingMode::MatCap, |e| e.shading_mode);
 
-                            if mesh_visible {
+                            if mesh_visible && (!self.is_culled || !self.low_end_mode) {
                                 if let Some(gpu) = &self.mesh_gpu {
                                     let render_mode = match shading_mode {
                                         ShadingMode::Wireframe => 0,

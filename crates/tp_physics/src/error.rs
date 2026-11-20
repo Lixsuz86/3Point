@@ -17,3 +17,4 @@ pub enum PhysicsError {
     #[error("Fizik simülasyon adımı başarısız: {0}")]
     SimulationFailed(String),
 }
+

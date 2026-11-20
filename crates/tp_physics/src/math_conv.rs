@@ -43,3 +43,4 @@ pub fn isometry_to_transform(iso: &Isometry3<f32>) -> (Vec3, Quat) {
     let q = na_to_quat(iso.rotation);
     (t, q)
 }
+

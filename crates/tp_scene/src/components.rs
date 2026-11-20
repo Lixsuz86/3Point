@@ -131,3 +131,4 @@ pub struct PhysicsBodyComponent(pub RigidBodyHandle);
 /// Fizik dünyasındaki çarpıştırıcı bağlantısı.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PhysicsColliderComponent(pub ColliderHandle);
+

@@ -6,6 +6,7 @@
 pub mod bvh;
 pub mod error;
 pub mod history;
+pub mod io;
 pub mod mesh;
 pub mod ops;
 pub mod picking;
@@ -15,6 +16,7 @@ pub mod topology;
 pub use bvh::{BvhNode, MeshBvh};
 pub use error::MeshError;
 pub use history::{MeshCommand, SnapshotMeshCommand, UndoStack};
+pub use io::{export_3p, export_obj, import_3p, import_obj, Binary3pHeader};
 pub use mesh::{HalfEdgeMesh, MeshVertexData};
 pub use picking::{pick_face, pick_vertex, FaceHit, SelectionMode, SelectionSet};
 pub use primitives::{

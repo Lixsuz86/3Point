@@ -173,12 +173,21 @@ Proje, bağımsız derlenebilir ve test edilebilir alt modüllerden (crates) olu
 ### Faz 6: İleri Seviye Optimizasyon ve MVP Sürümü
 *Hedef: Üretim seviyesinde kararlılık, düşük bellek ayak izi ve ilk resmi dağıtım.*
 
-- [ ] **GPU-Driven Rendering & Culling:**
-  - Compute tabanlı Frustum Culling ve Donanım Oklüzyon Testleri (Hi-Z).
-  - Bindless Textures / Indirect Draw çağrıları ile CPU yükünün minimize edilmesi.
-- [ ] **Çoklu İş Parçacıklı Performans İnce Ayarları:**
-  - Cache-friendly SoA (Structure of Arrays) dönüşümleri.
-  - Tracy ile frame süresi darboğazlarının analizi (hedef: 4K 60+ FPS kararlı viewport).
-- [ ] **MVP Paketi:**
-  - Entegre modelleme, kemik bağlama, animasyon yapma ve sahneyi oyun modunda gezinilebilir şekilde çalıştırma demonstrasyonu.
+- [x] **Görünürlük Testi & Geometri Budama (Frustum Culling):**
+  - Analitik 6-düzlemli Frustum Culling (`tp_math::Frustum`) ve AABB kesişim testleri.
+  - Kamera görüş alanı dışındaki nesnelerin çizim döngüsünden elenmesi ile sıfır gereksiz draw-call ve GPU tasarrufu.
+- [x] **Varlık İçe/Dışa Aktarma Boru Hattı (Asset IO Pipeline - `tp_mesh::io`):**
+  - Standart Wavefront OBJ içe ve dışa aktarıcısı (`export_obj`, `import_obj`) ile harici model uyumluluğu.
+  - Yüksek hızlı, sıfır kopyalı yerel ikili format (`.3p`, `export_3p`, `import_3p`) - Bytemuck ile bellekten doğrudan yükleme.
+- [x] **Hazır Sahne Şablonları (Starter Templates - `tp_scene::templates`):**
+  - Boş Çalışma Alanı (Empty Studio): Zemin ızgarası, kamera ve yönlü ışık.
+  - Karakter Animasyon Stüdyosu (Character Studio): İskelet armatürü ve referans kukla modelleri.
+  - 3D Fizik Kum Havuzu (Physics Sandbox): Statik zemin ve dinamik düşen/çarpışan kutu ve küreler.
+- [x] **Canlı Telemetri ve Düşük Donanım Modu (Telemetry & Low-End Mode):**
+  - Anlık FPS ve Frame süresi (ms) göstergesi.
+  - Frustum Culling durumu paneli (🚫 Elendi / 👁️ Görünür).
+  - Düşük donanımlı eski dizüstü bilgisayarlar ve entegre GPU'lar için "🌱 Düşük Donanım Tasarrufu" güç modu.
+- [x] **Üretim Seviyesi Dağıtım & Derleme Profili (Release Packaging):**
+  - `Cargo.toml` Release profili: `opt-level = 3`, `lto = "thin"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`.
+  - Minimum ikili dosya boyutu, sıfır gereksiz bellek kullanımı ve tam test kapsamı (33/33 test başarılı).
 

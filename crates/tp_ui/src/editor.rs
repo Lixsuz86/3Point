@@ -34,6 +34,11 @@ pub enum EditorEvent {
     PlayGame,
     PauseGame,
     StopGame,
+    LoadEmptyScene,
+    LoadCharacterScene,
+    LoadPhysicsScene,
+    ExportObj,
+    Export3P,
 }
 
 /// Editör arayüz güncellemesine sahneden aktarılan durum verileri.
@@ -50,6 +55,10 @@ pub struct EditorSceneContext<'a> {
     pub anim_speed: &'a mut f32,
     pub anim_is_playing: bool,
     pub anim_looping: &'a mut bool,
+    pub fps: f32,
+    pub frame_time_ms: f32,
+    pub is_culled: bool,
+    pub low_end_mode: &'a mut bool,
 }
 
 /// Tüm editör panellerini, giriş olaylarını ve egui durumunu yöneten yapı.
@@ -149,6 +158,11 @@ impl Editor {
                     MenuAction::PlayGame => triggered_event = Some(EditorEvent::PlayGame),
                     MenuAction::PauseGame => triggered_event = Some(EditorEvent::PauseGame),
                     MenuAction::StopGame => triggered_event = Some(EditorEvent::StopGame),
+                    MenuAction::NewEmptyScene => triggered_event = Some(EditorEvent::LoadEmptyScene),
+                    MenuAction::NewCharacterScene => triggered_event = Some(EditorEvent::LoadCharacterScene),
+                    MenuAction::NewPhysicsScene => triggered_event = Some(EditorEvent::LoadPhysicsScene),
+                    MenuAction::ExportObj => triggered_event = Some(EditorEvent::ExportObj),
+                    MenuAction::Export3P => triggered_event = Some(EditorEvent::Export3P),
                     _ => {}
                 }
             }
@@ -204,6 +218,10 @@ impl Editor {
                     selected_face: scene.selected_face,
                     extrude_dist: &mut self.extrude_dist,
                     inset_factor: &mut self.inset_factor,
+                    fps: scene.fps,
+                    frame_time_ms: scene.frame_time_ms,
+                    is_culled: scene.is_culled,
+                    low_end_mode: scene.low_end_mode,
                 };
 
                 if let Some(action) = render_inspector(ui, inspector_data) {

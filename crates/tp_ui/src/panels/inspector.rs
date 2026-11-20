@@ -15,6 +15,10 @@ pub struct InspectorData<'a> {
     pub selected_face: Option<FaceId>,
     pub extrude_dist: &'a mut f32,
     pub inset_factor: &'a mut f32,
+    pub fps: f32,
+    pub frame_time_ms: f32,
+    pub is_culled: bool,
+    pub low_end_mode: &'a mut bool,
 }
 
 /// Inspector paneli eylemleri.
@@ -135,6 +139,30 @@ pub fn render_inspector(ui: &mut Ui, data: InspectorData<'_>) -> Option<Inspecto
         if ui.button("❖ Subdivide (Tüm Mesh)").clicked() {
             action = Some(InspectorAction::Subdivide);
         }
+    });
+
+    ui.separator();
+
+    // 4. Performans ve Telemetri (Faz 6)
+    ui.collapsing("⚡ Performans & Düşük Donanım", |ui| {
+        ui.horizontal(|ui| {
+            ui.label("FPS:");
+            ui.colored_label(Color32::from_rgb(74, 222, 128), format!("{:.0}", data.fps));
+            ui.separator();
+            ui.label("Kare Süresi:");
+            ui.colored_label(Color32::from_rgb(56, 189, 248), format!("{:.2} ms", data.frame_time_ms));
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Görüş Testi (Frustum):");
+            if data.is_culled {
+                ui.colored_label(Color32::from_rgb(248, 113, 113), "🚫 Elendi (Culled)");
+            } else {
+                ui.colored_label(Color32::from_rgb(74, 222, 128), "👁️ Görünür (Visible)");
+            }
+        });
+
+        ui.checkbox(data.low_end_mode, "🌱 Düşük Donanım Tasarrufu");
     });
 
     action

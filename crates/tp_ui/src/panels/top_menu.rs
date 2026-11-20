@@ -35,6 +35,11 @@ pub enum MenuAction {
     PlayGame,
     PauseGame,
     StopGame,
+    NewEmptyScene,
+    NewCharacterScene,
+    NewPhysicsScene,
+    ExportObj,
+    Export3P,
 }
 
 /// Üst menü çubuğunu render eder.
@@ -50,12 +55,25 @@ pub fn render_top_menu(
         ui.separator();
 
         menu::menu_button(ui, "Dosya", |ui| {
-            if ui.button("Yeni Sahne (Ctrl+N)").clicked() {
-                triggered_action = Some(MenuAction::NewScene);
+            if ui.button("Yeni Boş Sahne (Ctrl+N)").clicked() {
+                triggered_action = Some(MenuAction::NewEmptyScene);
+                ui.close_menu();
+            }
+            if ui.button("Şablon: Karakter Stüdyosu").clicked() {
+                triggered_action = Some(MenuAction::NewCharacterScene);
+                ui.close_menu();
+            }
+            if ui.button("Şablon: Fizik Test Alanı").clicked() {
+                triggered_action = Some(MenuAction::NewPhysicsScene);
                 ui.close_menu();
             }
             ui.separator();
-            if ui.button("Dışa Aktar (glTF 2.0)").clicked() {
+            if ui.button("Dışa Aktar (.OBJ Model)").clicked() {
+                triggered_action = Some(MenuAction::ExportObj);
+                ui.close_menu();
+            }
+            if ui.button("Dışa Aktar (.3P Hızlı İkili)").clicked() {
+                triggered_action = Some(MenuAction::Export3P);
                 ui.close_menu();
             }
         });

@@ -10,6 +10,7 @@ pub mod components;
 pub mod error;
 pub mod scene;
 pub mod systems;
+pub mod templates;
 
 pub use components::{
     CameraComponent, GlobalTransform, Hierarchy, LightComponent, LightType, MeshRenderer, Name,
@@ -20,3 +21,4 @@ pub use scene::{EngineState, Scene};
 pub use systems::{
     sync_physics_to_transforms, sync_transforms_to_physics, update_hierarchy_transforms,
 };
+pub use templates::{create_character_scene, create_empty_scene, create_physics_sandbox};
