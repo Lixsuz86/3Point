@@ -5,6 +5,15 @@ use ash::{vk, Device};
 
 /// WGSL kaynak kodunu doğrular ve Vulkan uyumlu SPIR-V ikili formatına (`Vec<u32>`) derler.
 pub fn compile_wgsl_to_spirv(source: &str, stage_name: &str) -> Result<Vec<u32>, GfxError> {
+    compile_wgsl_to_spirv_with_entry(source, stage_name, None)
+}
+
+/// WGSL kaynak kodunu isteğe bağlı giriş noktası adıyla SPIR-V ikili formatına derler.
+pub fn compile_wgsl_to_spirv_with_entry(
+    source: &str,
+    stage_name: &str,
+    entry_point_override: Option<&str>,
+) -> Result<Vec<u32>, GfxError> {
     let module = naga::front::wgsl::parse_str(source).map_err(|e| {
         let err_msg = format!("WGSL ayrıştırma hatası ({stage_name}):\n{}", e.emit_to_string(source));
         tracing::error!("{err_msg}");
@@ -22,6 +31,27 @@ pub fn compile_wgsl_to_spirv(source: &str, stage_name: &str) -> Result<Vec<u32>,
         GfxError::Generic(err_msg)
     })?;
 
+    let target_stage = match stage_name {
+        "vertex" => naga::ShaderStage::Vertex,
+        "fragment" => naga::ShaderStage::Fragment,
+        "compute" => naga::ShaderStage::Compute,
+        _ => naga::ShaderStage::Vertex,
+    };
+
+    let entry_point = if let Some(ep) = entry_point_override {
+        ep.to_string()
+    } else {
+        module
+            .entry_points
+            .iter()
+            .find(|ep| ep.stage == target_stage)
+            .map(|ep| ep.name.clone())
+            .unwrap_or_else(|| match target_stage {
+                naga::ShaderStage::Fragment => "main_fs".to_string(),
+                _ => "main".to_string(),
+            })
+    };
+
     let options = naga::back::spv::Options {
         lang_version: (1, 3), // Vulkan 1.2 için SPIR-V 1.3
         flags: naga::back::spv::WriterFlags::empty(),
@@ -30,19 +60,14 @@ pub fn compile_wgsl_to_spirv(source: &str, stage_name: &str) -> Result<Vec<u32>,
     };
 
     let pipeline_options = naga::back::spv::PipelineOptions {
-        shader_stage: match stage_name {
-            "vertex" => naga::ShaderStage::Vertex,
-            "fragment" => naga::ShaderStage::Fragment,
-            "compute" => naga::ShaderStage::Compute,
-            _ => naga::ShaderStage::Vertex,
-        },
-        entry_point: "main".to_string(),
+        shader_stage: target_stage,
+        entry_point: entry_point.clone(),
     };
 
     let spirv = naga::back::spv::write_vec(&module, &module_info, &options, Some(&pipeline_options))
-        .map_err(|e| GfxError::Generic(format!("SPIR-V üretim hatası: {e:?}")))?;
+        .map_err(|e| GfxError::Generic(format!("SPIR-V üretim hatası ({stage_name}, entry={entry_point}): {e:?}")))?;
 
-    tracing::debug!("Shader derlendi ({stage_name}): {} SPIR-V kelimesi.", spirv.len());
+    tracing::debug!("Shader derlendi ({stage_name}, entry={entry_point}): {} SPIR-V kelimesi.", spirv.len());
     Ok(spirv)
 }
 

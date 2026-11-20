@@ -8,6 +8,8 @@ pub struct GraphicsPipelineBuilder<'a> {
     device: &'a Device,
     vertex_shader: vk::ShaderModule,
     fragment_shader: vk::ShaderModule,
+    vertex_entry_point: std::ffi::CString,
+    fragment_entry_point: std::ffi::CString,
     vertex_bindings: Vec<vk::VertexInputBindingDescription>,
     vertex_attributes: Vec<vk::VertexInputAttributeDescription>,
     topology: vk::PrimitiveTopology,
@@ -33,6 +35,8 @@ impl<'a> GraphicsPipelineBuilder<'a> {
             device,
             vertex_shader,
             fragment_shader,
+            vertex_entry_point: std::ffi::CString::new("main").expect("Valid CString"),
+            fragment_entry_point: std::ffi::CString::new("main_fs").expect("Valid CString"),
             vertex_bindings: Vec::new(),
             vertex_attributes: Vec::new(),
             topology: vk::PrimitiveTopology::TRIANGLE_LIST,
@@ -45,6 +49,18 @@ impl<'a> GraphicsPipelineBuilder<'a> {
             descriptor_set_layouts: Vec::new(),
             render_pass,
         }
+    }
+
+    /// Özel giriş noktası (Entry Point) adlarını ayarlar.
+    #[must_use]
+    pub fn with_entry_points(mut self, vs_entry: &str, fs_entry: &str) -> Self {
+        if let Ok(c_vs) = std::ffi::CString::new(vs_entry) {
+            self.vertex_entry_point = c_vs;
+        }
+        if let Ok(c_fs) = std::ffi::CString::new(fs_entry) {
+            self.fragment_entry_point = c_fs;
+        }
+        self
     }
 
     /// Köşe düzeni (Vertex Layout) tanımlar.
@@ -97,17 +113,15 @@ impl<'a> GraphicsPipelineBuilder<'a> {
 
     /// Pipeline ve Pipeline Layout nesnelerini derleyip oluşturur.
     pub fn build(self) -> Result<(vk::Pipeline, vk::PipelineLayout), GfxError> {
-        let entry_point_name = c"main";
-
         let shader_stages = [
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::VERTEX)
                 .module(self.vertex_shader)
-                .name(entry_point_name),
+                .name(self.vertex_entry_point.as_c_str()),
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::FRAGMENT)
                 .module(self.fragment_shader)
-                .name(entry_point_name),
+                .name(self.fragment_entry_point.as_c_str()),
         ];
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
