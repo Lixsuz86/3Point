@@ -9,6 +9,10 @@
 
 > **3Point**, 3D poligon modelleme, iskelet/karakter animasyonu ve gerçek zamanlı oyun motoru runtime'ını tek bir çatı altında birleştiren, **%100 saf Rust** ile sıfırdan yazılmış, modern ve modüler bir dijital içerik üretim (DCC) stüdyosudur.
 
+### 📥 İndir & Dene (Beta v1 Sürümü)
+Kurulum, harici C++ runtime veya ağır SDK gerektirmeyen bağımsız Windows x64 yürütülebilir dosyası:
+👉 **[3point-beta-v1.exe İndir (5.9 MB)](https://github.com/Lixsuz86/3Point/raw/beta/release/3point-beta-v1.exe)**
+
 ---
 
 ## 🎯 Vizyon ve Tasarım İlkeleri
