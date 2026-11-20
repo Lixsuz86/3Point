@@ -85,6 +85,14 @@ pub fn apply_studio_theme(ctx: &egui::Context) {
     ctx.set_visuals(visuals);
 
     let mut style = (*ctx.style()).clone();
+    style.text_styles = [
+        (egui::TextStyle::Heading, egui::FontId::new(17.0, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Body, egui::FontId::new(13.5, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Button, egui::FontId::new(13.0, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Small, egui::FontId::new(11.0, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Monospace, egui::FontId::new(12.5, egui::FontFamily::Monospace)),
+    ].into();
+
     style.spacing = Spacing {
         item_spacing: egui::vec2(6.0, 6.0),
         window_margin: Margin::same(8.0),

@@ -83,6 +83,7 @@ pub struct Editor {
     // Son karede tessellate edilmiş çizim ilkelleri
     pub primitives: Vec<ClippedPrimitive>,
     pub pixels_per_point: f32,
+    pub textures_delta: egui::TexturesDelta,
 }
 
 impl Editor {
@@ -124,6 +125,7 @@ impl Editor {
             inset_factor: 0.25,
             primitives: Vec::new(),
             pixels_per_point: window.scale_factor() as f32,
+            textures_delta: egui::TexturesDelta::default(),
         })
     }
 
@@ -262,6 +264,9 @@ impl Editor {
         self.egui_winit
             .handle_platform_output(window, full_output.platform_output);
 
+        // Yeni veya güncellenen yazı tipi doku paketlerini biriktir
+        self.textures_delta.append(full_output.textures_delta);
+
         // Çizim komutlarını derle (Tessellation)
         self.primitives = self
             .egui_ctx
@@ -271,13 +276,25 @@ impl Editor {
     }
 
     /// Egui komutlarını Vulkan render geçişi içinde çizer.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
         device: &Device,
+        allocator: &mut Allocator,
+        queue: vk::Queue,
+        pool: vk::CommandPool,
         cmd: vk::CommandBuffer,
         screen_width: f32,
         screen_height: f32,
     ) -> Result<(), GfxError> {
+        // Bekleyen font ve arayüz dokularını GPU'ya aktar
+        if !self.textures_delta.set.is_empty() {
+            for (_id, delta) in &self.textures_delta.set {
+                self.renderer.update_texture(device, allocator, queue, pool, delta)?;
+            }
+            self.textures_delta.set.clear();
+        }
+
         self.renderer.render(
             device,
             cmd,

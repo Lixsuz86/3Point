@@ -684,7 +684,15 @@ impl ApplicationHandler for App {
 
                             // 4. Egui UI Arayüzünü Viewport Üzerine Çiz
                             if let Some(editor) = &mut self.editor {
-                                if let Err(e) = editor.render(device, cmd, size.width as f32, size.height as f32) {
+                                if let Err(e) = editor.render(
+                                    device,
+                                    &mut gfx.allocator,
+                                    gfx.device.graphics_queue,
+                                    gfx.commands.pool,
+                                    cmd,
+                                    size.width as f32,
+                                    size.height as f32,
+                                ) {
                                     tracing::error!("Egui UI render hatası: {e}");
                                 }
                             }

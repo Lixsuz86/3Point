@@ -111,6 +111,13 @@ impl<'a> GraphicsPipelineBuilder<'a> {
         self
     }
 
+    /// Descriptor Set Layout ekler.
+    #[must_use]
+    pub fn with_descriptor_layout(mut self, layout: vk::DescriptorSetLayout) -> Self {
+        self.descriptor_set_layouts.push(layout);
+        self
+    }
+
     /// Pipeline ve Pipeline Layout nesnelerini derleyip oluşturur.
     pub fn build(self) -> Result<(vk::Pipeline, vk::PipelineLayout), GfxError> {
         let shader_stages = [
