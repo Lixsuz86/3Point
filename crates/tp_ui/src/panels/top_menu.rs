@@ -7,8 +7,8 @@ use egui::{menu, Color32, Layout, RichText, Ui};
 pub enum StudioMode {
     #[default]
     Modeling,
-    Sculpt,
     Animation,
+    Scene,
     GameRuntime,
 }
 
@@ -118,8 +118,8 @@ pub fn render_top_menu(
 
         // Stüdyo Mod Seçici (Merkezde butonlar)
         ui.selectable_value(current_mode, StudioMode::Modeling, "📐 Modelleme");
-        ui.selectable_value(current_mode, StudioMode::Sculpt, "🎨 Heykeltıraş");
         ui.selectable_value(current_mode, StudioMode::Animation, "🎬 Animasyon");
+        ui.selectable_value(current_mode, StudioMode::Scene, "🌐 Sahne");
         ui.selectable_value(current_mode, StudioMode::GameRuntime, "🎮 Oyun Testi");
 
         if *current_mode == StudioMode::GameRuntime {

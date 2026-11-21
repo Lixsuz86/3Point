@@ -8,7 +8,7 @@ pub mod panels;
 pub mod theme;
 pub mod vulkan_render;
 
-pub use editor::{Editor, EditorEvent, EditorSceneContext};
+pub use editor::{Editor, EditorEvent, EditorMeshInfo, EditorSceneContext};
 pub use panels::{
     render_inspector, render_outliner, render_timeline, render_toolbox, render_top_menu,
     InspectorAction, InspectorData, MenuAction, SceneObject, ShadingMode, StudioMode,

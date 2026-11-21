@@ -1,16 +1,18 @@
-//! 3Point DCC Editör Yöneticisi (`Editor`).
+//! 3Point DCC Stüdyo ve Oyun Motoru Editör Katmanı (`Editor`).
 
 use crate::{
     panels::{
-        render_inspector, render_outliner, render_timeline, render_toolbox, render_top_menu,
-        InspectorAction, InspectorData, MenuAction, SceneObject, ShadingMode, StudioMode,
-        TimelineAction, TimelineData, ToolAction, TransformTool,
+        inspector::{render_inspector, InspectorAction, InspectorData},
+        outliner::{render_outliner, OutlinerAction, OutlinerMeshEntry, SceneObject},
+        timeline::{render_timeline, TimelineAction, TimelineData},
+        tools::{render_toolbox, ToolAction, TransformTool},
+        top_menu::{render_top_menu, MenuAction, ShadingMode, StudioMode},
     },
     theme::apply_studio_theme,
     vulkan_render::EguiVulkanRenderer,
 };
 use ash::{vk, Device};
-use egui::{ClippedPrimitive, Context, SidePanel, TopBottomPanel};
+use egui::{epaint::ClippedPrimitive, Color32, Context, DragValue, Grid, RichText, SidePanel, TopBottomPanel};
 use egui_winit::State as EguiWinitState;
 use glam::Vec3;
 use gpu_allocator::vulkan::Allocator;
@@ -18,15 +20,15 @@ use tp_gfx::error::GfxError;
 use tp_mesh::{topology::FaceId, SelectionMode};
 use winit::{event::WindowEvent, window::Window};
 
-/// Editör genelinde tetiklenen eylemler.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Editör tarafından tetiklenen ve ana uygulamaya iletilen olaylar.
+#[derive(Debug, Clone, PartialEq)]
 pub enum EditorEvent {
+    AddPrimitive(&'static str),
     Extrude(f32),
     Inset(f32),
     Subdivide,
     Undo,
     Redo,
-    AddPrimitive(&'static str),
     PlayAnimation,
     PauseAnimation,
     StopAnimation,
@@ -39,10 +41,23 @@ pub enum EditorEvent {
     LoadPhysicsScene,
     ExportObj,
     Export3P,
+    SelectObject(SceneObject),
+    DeleteSelectedObject,
+}
+
+/// Sahnedeki her bir nesnenin Outliner bilgisi.
+pub struct EditorMeshInfo<'a> {
+    pub id: u32,
+    pub name: &'a str,
+    pub visible: &'a mut bool,
 }
 
 /// Editör arayüz güncellemesine sahneden aktarılan durum verileri.
 pub struct EditorSceneContext<'a> {
+    pub mesh_infos: Vec<EditorMeshInfo<'a>>,
+    pub camera_visible: &'a mut bool,
+    pub light_visible: &'a mut bool,
+    pub active_mesh_name: &'a str,
     pub position: &'a mut Vec3,
     pub rotation: &'a mut Vec3,
     pub scale: &'a mut Vec3,
@@ -118,7 +133,7 @@ impl Editor {
             shading_mode: ShadingMode::MatCap,
             selection_mode: SelectionMode::Face,
             transform_tool: TransformTool::Select,
-            selected_object: Some(SceneObject::Mesh),
+            selected_object: Some(SceneObject::Mesh(0)),
             snap_grid: true,
             mesh_visible: true,
             extrude_dist: 0.8,
@@ -130,7 +145,6 @@ impl Editor {
     }
 
     /// Pencere olaylarını egui'ye iletir.
-    /// Eğer fare veya klavye UI üzerinde tüketildiyse `true` döner (Viewport etkileşimini engeller).
     pub fn handle_event(&mut self, window: &Window, event: &WindowEvent) -> bool {
         let response = self.egui_winit.on_window_event(window, event);
         response.consumed
@@ -170,94 +184,229 @@ impl Editor {
             }
         });
 
-        // 2. Sol Araç Çubuğu (Toolbox)
-        SidePanel::left("left_toolbox")
-            .resizable(false)
-            .default_width(75.0)
-            .show(&self.egui_ctx, |ui| {
-                if let Some(tool_action) = render_toolbox(
-                    ui,
-                    &mut self.selection_mode,
-                    &mut self.transform_tool,
-                    &mut self.snap_grid,
-                ) {
-                    match tool_action {
-                        ToolAction::Extrude => {
-                            triggered_event = Some(EditorEvent::Extrude(self.extrude_dist));
+        // 2. Sol Araç Çubuğu (Moda Göre Dinamik)
+        match self.current_mode {
+            StudioMode::Modeling => {
+                SidePanel::left("left_toolbox")
+                    .resizable(false)
+                    .default_width(75.0)
+                    .show(&self.egui_ctx, |ui| {
+                        if let Some(tool_action) = render_toolbox(
+                            ui,
+                            &mut self.selection_mode,
+                            &mut self.transform_tool,
+                            &mut self.snap_grid,
+                        ) {
+                            match tool_action {
+                                ToolAction::Extrude => {
+                                    triggered_event = Some(EditorEvent::Extrude(self.extrude_dist));
+                                }
+                                ToolAction::Inset => {
+                                    triggered_event = Some(EditorEvent::Inset(self.inset_factor));
+                                }
+                                ToolAction::Subdivide => {
+                                    triggered_event = Some(EditorEvent::Subdivide);
+                                }
+                            }
                         }
-                        ToolAction::Inset => {
-                            triggered_event = Some(EditorEvent::Inset(self.inset_factor));
-                        }
-                        ToolAction::Subdivide => {
-                            triggered_event = Some(EditorEvent::Subdivide);
-                        }
-                    }
-                }
-            });
+                    });
+            }
+            StudioMode::Animation => {
+                SidePanel::left("left_anim_toolbox")
+                    .resizable(false)
+                    .default_width(85.0)
+                    .show(&self.egui_ctx, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(4.0);
+                            ui.label(RichText::new("GİZMO").small().strong());
+                            ui.selectable_value(&mut self.transform_tool, TransformTool::Rotate, "🔄 Döndür");
+                            ui.selectable_value(&mut self.transform_tool, TransformTool::Translate, "✥ Taşı");
 
-        // 3. Sağ Panel: Üstte Outliner, Altta Inspector
+                            ui.separator();
+                            ui.label(RichText::new("POZ ARAÇLARI").small().strong());
+                            let _ = ui.button("📌 Keyframe").on_hover_text("Mevcut zamana kemik anahtarı ekler");
+                            let _ = ui.button("🎯 İki Kemik IK").on_hover_text("Bacak/kol analitik IK çözücüsü");
+                            let _ = ui.button("🦴 FABRIK IK").on_hover_text("Omurga/kuyruk çok eklemli IK");
+                            let _ = ui.button("🔄 Pozu Sıfırla").on_hover_text("Bind Pose durumuna döner");
+                        });
+                    });
+            }
+            StudioMode::Scene => {
+                SidePanel::left("left_scene_toolbox")
+                    .resizable(false)
+                    .default_width(90.0)
+                    .show(&self.egui_ctx, |ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(4.0);
+                            ui.label(RichText::new("NESNE EKLE").small().strong());
+                            if ui.button("🧊 Küp").clicked() {
+                                triggered_event = Some(EditorEvent::AddPrimitive("Cube"));
+                            }
+                            if ui.button("🌐 Küre").clicked() {
+                                triggered_event = Some(EditorEvent::AddPrimitive("Sphere"));
+                            }
+                            if ui.button("🥫 Silindir").clicked() {
+                                triggered_event = Some(EditorEvent::AddPrimitive("Cylinder"));
+                            }
+                            if ui.button("⏹ Düzlem").clicked() {
+                                triggered_event = Some(EditorEvent::AddPrimitive("Plane"));
+                            }
+
+                            ui.separator();
+                            ui.label(RichText::new("GİZMO").small().strong());
+                            ui.selectable_value(&mut self.transform_tool, TransformTool::Select, "👆 İmleç");
+                            ui.selectable_value(&mut self.transform_tool, TransformTool::Translate, "✥ Taşı (G)");
+                            ui.selectable_value(&mut self.transform_tool, TransformTool::Rotate, "🔄 Döndür (R)");
+                            ui.selectable_value(&mut self.transform_tool, TransformTool::Scale, "⤢ Ölçekle (S)");
+
+                            ui.separator();
+                            if ui.button(RichText::new("🗑️ Nesneyi Sil").color(Color32::from_rgb(248, 113, 113))).clicked() {
+                                triggered_event = Some(EditorEvent::DeleteSelectedObject);
+                            }
+                        });
+                    });
+            }
+            StudioMode::GameRuntime => {
+                // Oyun modunda sol panel gizlenir (tam ekran oyun alanı)
+            }
+        }
+
+        // 3. Sağ Panel: Outliner ve Inspector (Moda Göre Dinamik)
         SidePanel::right("right_dock_panel")
             .resizable(true)
             .default_width(260.0)
             .width_range(200.0..=400.0)
             .show(&self.egui_ctx, |ui| {
-                render_outliner(
+                let mut outliner_entries: Vec<OutlinerMeshEntry<'_>> = scene
+                    .mesh_infos
+                    .iter_mut()
+                    .map(|info| OutlinerMeshEntry {
+                        id: info.id,
+                        name: info.name,
+                        visible: info.visible,
+                    })
+                    .collect();
+
+                if let Some(outliner_action) = render_outliner(
                     ui,
                     &mut self.selected_object,
-                    "Default Cube",
-                    &mut self.mesh_visible,
-                );
+                    &mut outliner_entries,
+                    scene.camera_visible,
+                    scene.light_visible,
+                ) {
+                    match outliner_action {
+                        OutlinerAction::Select(obj) => triggered_event = Some(EditorEvent::SelectObject(obj)),
+                        OutlinerAction::DeleteSelected => triggered_event = Some(EditorEvent::DeleteSelectedObject),
+                    }
+                }
 
                 ui.separator();
 
-                let inspector_data = InspectorData {
-                    position: scene.position,
-                    rotation: scene.rotation,
-                    scale: scene.scale,
-                    vertex_count: scene.vertex_count,
-                    edge_count: scene.edge_count,
-                    face_count: scene.face_count,
-                    selected_face: scene.selected_face,
-                    extrude_dist: &mut self.extrude_dist,
-                    inset_factor: &mut self.inset_factor,
-                    fps: scene.fps,
-                    frame_time_ms: scene.frame_time_ms,
-                    is_culled: scene.is_culled,
-                    low_end_mode: scene.low_end_mode,
-                };
+                match self.current_mode {
+                    StudioMode::Modeling | StudioMode::Scene => {
+                        let inspector_data = InspectorData {
+                            position: scene.position,
+                            rotation: scene.rotation,
+                            scale: scene.scale,
+                            vertex_count: scene.vertex_count,
+                            edge_count: scene.edge_count,
+                            face_count: scene.face_count,
+                            selected_face: scene.selected_face,
+                            extrude_dist: &mut self.extrude_dist,
+                            inset_factor: &mut self.inset_factor,
+                            fps: scene.fps,
+                            frame_time_ms: scene.frame_time_ms,
+                            is_culled: scene.is_culled,
+                            low_end_mode: scene.low_end_mode,
+                        };
 
-                if let Some(action) = render_inspector(ui, inspector_data) {
-                    match action {
-                        InspectorAction::Extrude(d) => triggered_event = Some(EditorEvent::Extrude(d)),
-                        InspectorAction::Inset(f) => triggered_event = Some(EditorEvent::Inset(f)),
-                        InspectorAction::Subdivide => triggered_event = Some(EditorEvent::Subdivide),
+                        if let Some(action) = render_inspector(ui, inspector_data) {
+                            match action {
+                                InspectorAction::Extrude(d) => triggered_event = Some(EditorEvent::Extrude(d)),
+                                InspectorAction::Inset(f) => triggered_event = Some(EditorEvent::Inset(f)),
+                                InspectorAction::Subdivide => triggered_event = Some(EditorEvent::Subdivide),
+                            }
+                        }
+                    }
+                    StudioMode::Animation => {
+                        ui.heading(RichText::new("🎬 Animasyon Özellikleri").size(14.0));
+                        ui.separator();
+                        ui.collapsing("🦴 İskelet Bilgisi", |ui| {
+                            ui.label("• Root (Kök Kemik)");
+                            ui.label("  └── Spine (Omurga)");
+                            ui.label("      └── Head (Kafa)");
+                        });
+                        ui.collapsing("📐 Kıpırdama & Hız Ayarları", |ui| {
+                            Grid::new("anim_settings_grid").num_columns(2).spacing([6.0, 4.0]).show(ui, |ui| {
+                                ui.label("Klip Süresi:");
+                                ui.label(format!("{:.1} sn", scene.anim_duration));
+                                ui.end_row();
+
+                                ui.label("Oynatma Hızı:");
+                                ui.add(DragValue::new(scene.anim_speed).speed(0.1).range(0.1..=4.0).suffix("x"));
+                                ui.end_row();
+
+                                ui.label("Döngü (Loop):");
+                                ui.checkbox(scene.anim_looping, "");
+                                ui.end_row();
+                            });
+                        });
+                    }
+                    StudioMode::GameRuntime => {
+                        ui.heading(RichText::new("🎮 Canlı Oyun Durumu").size(14.0));
+                        ui.separator();
+                        ui.collapsing("⚡ Fizik Motoru (Rapier3D)", |ui| {
+                            ui.label("Yerçekimi: -9.81 m/s² (Y)");
+                            ui.label("Dinamik Gövdeler: Aktif");
+                            ui.label("Çarpıştırıcılar: Aktif (AABB/TriMesh)");
+                        });
+                        ui.collapsing("📊 Canlı Telemetri", |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label("Anlık FPS:");
+                                ui.colored_label(Color32::from_rgb(74, 222, 128), format!("{:.0}", scene.fps));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("Kare Süresi:");
+                                ui.label(format!("{:.2} ms", scene.frame_time_ms));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("Görünürlük:");
+                                if scene.is_culled {
+                                    ui.colored_label(Color32::from_rgb(248, 113, 113), "🚫 Elendi");
+                                } else {
+                                    ui.colored_label(Color32::from_rgb(74, 222, 128), "👁️ Görünür");
+                                }
+                            });
+                        });
                     }
                 }
             });
 
-        // 4. Alt Panel: Animasyon Zaman Çizelgesi (Timeline & Dopesheet)
-        TopBottomPanel::bottom("bottom_timeline_panel")
-            .resizable(false)
-            .default_height(36.0)
-            .show(&self.egui_ctx, |ui| {
-                let timeline_data = TimelineData {
-                    current_time: scene.anim_time,
-                    duration: scene.anim_duration,
-                    speed: scene.anim_speed,
-                    is_playing: scene.anim_is_playing,
-                    looping: scene.anim_looping,
-                    fps: 30,
-                };
-                if let Some(timeline_action) = render_timeline(ui, timeline_data) {
-                    match timeline_action {
-                        TimelineAction::Play => triggered_event = Some(EditorEvent::PlayAnimation),
-                        TimelineAction::Pause => triggered_event = Some(EditorEvent::PauseAnimation),
-                        TimelineAction::Stop => triggered_event = Some(EditorEvent::StopAnimation),
-                        TimelineAction::Scrub(t) => triggered_event = Some(EditorEvent::ScrubAnimation(t)),
-                        TimelineAction::AddKeyframe => {}
+        // 4. Alt Panel: Yalnızca Animasyon ve Oyun modunda gösterilir
+        if self.current_mode == StudioMode::Animation {
+            TopBottomPanel::bottom("bottom_timeline_panel")
+                .resizable(false)
+                .default_height(42.0)
+                .show(&self.egui_ctx, |ui| {
+                    let timeline_data = TimelineData {
+                        current_time: scene.anim_time,
+                        duration: scene.anim_duration,
+                        speed: scene.anim_speed,
+                        is_playing: scene.anim_is_playing,
+                        looping: scene.anim_looping,
+                        fps: 30,
+                    };
+                    if let Some(timeline_action) = render_timeline(ui, timeline_data) {
+                        match timeline_action {
+                            TimelineAction::Play => triggered_event = Some(EditorEvent::PlayAnimation),
+                            TimelineAction::Pause => triggered_event = Some(EditorEvent::PauseAnimation),
+                            TimelineAction::Stop => triggered_event = Some(EditorEvent::StopAnimation),
+                            TimelineAction::Scrub(t) => triggered_event = Some(EditorEvent::ScrubAnimation(t)),
+                            TimelineAction::AddKeyframe => {}
+                        }
                     }
-                }
-            });
+                });
+        }
 
         let full_output = self.egui_ctx.end_pass();
         self.pixels_per_point = full_output.pixels_per_point;

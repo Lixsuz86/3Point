@@ -188,6 +188,188 @@ impl VulkanDebugDraw {
         self.draw_line(origin, z_axis, Vec4::new(0.1, 0.4, 1.0, 1.0)); // Z: Mavi
     }
 
+    /// 3B Çember çizer.
+    pub fn draw_circle(&mut self, center: Vec3, normal: Vec3, radius: f32, segments: usize, color: Vec4) {
+        let n = normal.normalize_or_zero();
+        let up = if n.y.abs() > 0.99 { Vec3::Z } else { Vec3::Y };
+        let u = n.cross(up).normalize();
+        let v = n.cross(u).normalize();
+
+        let step = std::f32::consts::TAU / (segments as f32);
+        for i in 0..segments {
+            let theta0 = (i as f32) * step;
+            let theta1 = ((i + 1) as f32) * step;
+
+            let p0 = center + (u * theta0.cos() + v * theta0.sin()) * radius;
+            let p1 = center + (u * theta1.cos() + v * theta1.sin()) * radius;
+            self.draw_line(p0, p1, color);
+        }
+    }
+
+    /// Kamera görselleştirme tel kafesi (Frustum ve gövde).
+    pub fn draw_camera_gizmo(&mut self, position: Vec3, target: Vec3, size: f32, color: Vec4) {
+        let forward = (target - position).normalize_or_zero();
+        let fwd = if forward.length_squared() < 0.001 { Vec3::NEG_Z } else { forward };
+        let right = fwd.cross(Vec3::Y).normalize_or_zero();
+        let up = right.cross(fwd).normalize_or_zero();
+
+        // Kamera arkası gövde kutusu
+        let half_w = right * (size * 0.35);
+        let half_h = up * (size * 0.25);
+        let back_center = position - fwd * (size * 0.4);
+
+        let c0 = back_center - half_w - half_h;
+        let c1 = back_center + half_w - half_h;
+        let c2 = back_center + half_w + half_h;
+        let c3 = back_center - half_w + half_h;
+
+        self.draw_line(c0, c1, color);
+        self.draw_line(c1, c2, color);
+        self.draw_line(c2, c3, color);
+        self.draw_line(c3, c0, color);
+
+        // Vizör piramidi (Ön düzlem)
+        let front_center = position + fwd * (size * 0.8);
+        let fw_half = right * (size * 0.6);
+        let fh_half = up * (size * 0.4);
+
+        let f0 = front_center - fw_half - fh_half;
+        let f1 = front_center + fw_half - fh_half;
+        let f2 = front_center + fw_half + fh_half;
+        let f3 = front_center - fw_half + fh_half;
+
+        self.draw_line(f0, f1, color);
+        self.draw_line(f1, f2, color);
+        self.draw_line(f2, f3, color);
+        self.draw_line(f3, f0, color);
+
+        // Gövdeden vizöre çizgiler
+        self.draw_line(position, f0, color);
+        self.draw_line(position, f1, color);
+        self.draw_line(position, f2, color);
+        self.draw_line(position, f3, color);
+
+        // Üst "Yukarı" gösterge üçgeni
+        let top_marker = back_center + half_h + up * (size * 0.2);
+        self.draw_line(c2, top_marker, color);
+        self.draw_line(c3, top_marker, color);
+    }
+
+    /// Genel aydınlatma / Güneş simgesi (Sun Disc & Işınlar).
+    pub fn draw_light_gizmo(&mut self, position: Vec3, direction: Vec3, size: f32, color: Vec4) {
+        // Güneş çekirdeği çemberleri (3 Eksen)
+        self.draw_circle(position, Vec3::Y, size * 0.4, 16, color);
+        self.draw_circle(position, Vec3::X, size * 0.4, 16, color);
+        self.draw_circle(position, Vec3::Z, size * 0.4, 16, color);
+
+        // Çapraz parlama yıldızı
+        self.draw_line(position - Vec3::X * (size * 0.6), position + Vec3::X * (size * 0.6), color);
+        self.draw_line(position - Vec3::Y * (size * 0.6), position + Vec3::Y * (size * 0.6), color);
+        self.draw_line(position - Vec3::Z * (size * 0.6), position + Vec3::Z * (size * 0.6), color);
+
+        // Güneş yönlü ışınları (Directional Rays)
+        let dir = direction.normalize_or_zero();
+        let dir = if dir.length_squared() < 0.001 { Vec3::new(-0.4, -0.8, -0.4).normalize() } else { dir };
+        let ray_len = size * 1.5;
+
+        let offsets = [
+            Vec3::ZERO,
+            Vec3::new(size * 0.5, 0.0, 0.0),
+            Vec3::new(-size * 0.5, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, size * 0.5),
+            Vec3::new(0.0, 0.0, -size * 0.5),
+        ];
+
+        let ray_color = Vec4::new(color.x, color.y, color.z, 0.7);
+        for off in offsets {
+            let start = position + off;
+            let end = start + dir * ray_len;
+            self.draw_line(start, end, ray_color);
+            // Işın ucu ok göstergesi
+            self.draw_line(end, end - dir * (size * 0.2) + Vec3::Y * (size * 0.1), ray_color);
+        }
+    }
+
+    /// 3B Taşıma Gizmosu (Translate Handles).
+    pub fn draw_translate_gizmo(&mut self, position: Vec3, size: f32) {
+        let x_end = position + Vec3::X * size;
+        let y_end = position + Vec3::Y * size;
+        let z_end = position + Vec3::Z * size;
+
+        let red = Vec4::new(0.95, 0.22, 0.25, 1.0);
+        let green = Vec4::new(0.25, 0.90, 0.30, 1.0);
+        let blue = Vec4::new(0.25, 0.45, 0.98, 1.0);
+
+        // Ana kollar
+        self.draw_line(position, x_end, red);
+        self.draw_line(position, y_end, green);
+        self.draw_line(position, z_end, blue);
+
+        // Eksen ok uçları
+        let arrow_size = size * 0.12;
+        self.draw_line(x_end, x_end - Vec3::X * arrow_size + Vec3::Y * arrow_size, red);
+        self.draw_line(x_end, x_end - Vec3::X * arrow_size - Vec3::Y * arrow_size, red);
+        self.draw_line(y_end, y_end - Vec3::Y * arrow_size + Vec3::X * arrow_size, green);
+        self.draw_line(y_end, y_end - Vec3::Y * arrow_size - Vec3::X * arrow_size, green);
+        self.draw_line(z_end, z_end - Vec3::Z * arrow_size + Vec3::Y * arrow_size, blue);
+        self.draw_line(z_end, z_end - Vec3::Z * arrow_size - Vec3::Y * arrow_size, blue);
+
+        // Düzlemsel tutamaçlar (Küçük kareler: XY, XZ, YZ)
+        let plane_size = size * 0.3;
+        let xy_corner = position + (Vec3::X + Vec3::Y) * plane_size;
+        let xz_corner = position + (Vec3::X + Vec3::Z) * plane_size;
+        let yz_corner = position + (Vec3::Y + Vec3::Z) * plane_size;
+
+        self.draw_line(position + Vec3::X * plane_size, xy_corner, red);
+        self.draw_line(position + Vec3::Y * plane_size, xy_corner, green);
+
+        self.draw_line(position + Vec3::X * plane_size, xz_corner, red);
+        self.draw_line(position + Vec3::Z * plane_size, xz_corner, blue);
+
+        self.draw_line(position + Vec3::Y * plane_size, yz_corner, green);
+        self.draw_line(position + Vec3::Z * plane_size, yz_corner, blue);
+    }
+
+    /// 3B Döndürme Gizmosu (Rotation Rings).
+    pub fn draw_rotate_gizmo(&mut self, position: Vec3, size: f32) {
+        let red = Vec4::new(0.95, 0.22, 0.25, 0.9);
+        let green = Vec4::new(0.25, 0.90, 0.30, 0.9);
+        let blue = Vec4::new(0.25, 0.45, 0.98, 0.9);
+
+        // X, Y, Z eksenleri etrafındaki döndürme halkaları
+        self.draw_circle(position, Vec3::X, size, 32, red);
+        self.draw_circle(position, Vec3::Y, size, 32, green);
+        self.draw_circle(position, Vec3::Z, size, 32, blue);
+    }
+
+    /// 3B Ölçekleme Gizmosu (Scale Handles).
+    pub fn draw_scale_gizmo(&mut self, position: Vec3, size: f32) {
+        let x_end = position + Vec3::X * size;
+        let y_end = position + Vec3::Y * size;
+        let z_end = position + Vec3::Z * size;
+
+        let red = Vec4::new(0.95, 0.22, 0.25, 1.0);
+        let green = Vec4::new(0.25, 0.90, 0.30, 1.0);
+        let blue = Vec4::new(0.25, 0.45, 0.98, 1.0);
+
+        self.draw_line(position, x_end, red);
+        self.draw_line(position, y_end, green);
+        self.draw_line(position, z_end, blue);
+
+        // Uçlardaki ölçekleme kutucukları
+        let box_size = size * 0.08;
+        let aabb_x = Aabb::new(x_end - Vec3::splat(box_size), x_end + Vec3::splat(box_size));
+        let aabb_y = Aabb::new(y_end - Vec3::splat(box_size), y_end + Vec3::splat(box_size));
+        let aabb_z = Aabb::new(z_end - Vec3::splat(box_size), z_end + Vec3::splat(box_size));
+
+        self.draw_aabb(&aabb_x, red);
+        self.draw_aabb(&aabb_y, green);
+        self.draw_aabb(&aabb_z, blue);
+
+        // Eşit/Tüm yönlü ölçekleme dış çemberi
+        self.draw_circle(position, Vec3::Y, size * 1.15, 32, Vec4::new(0.9, 0.9, 0.9, 0.5));
+    }
+
     /// Bir ışını (Ray) yönü boyunca görselleştirir.
     pub fn draw_ray(&mut self, ray: &Ray, length: f32, color: Vec4) {
         self.draw_line(ray.origin, ray.at(length), color);

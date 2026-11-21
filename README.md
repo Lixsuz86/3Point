@@ -9,9 +9,16 @@
 
 > **3Point**, 3D poligon modelleme, iskelet/karakter animasyonu ve gerçek zamanlı oyun motoru runtime'ını tek bir çatı altında birleştiren, **%100 saf Rust** ile sıfırdan yazılmış, modern ve modüler bir dijital içerik üretim (DCC) stüdyosudur.
 
-### 📥 İndir & Dene (Beta v1 Sürümü)
+### 📥 İndir & Dene (Beta v1.2 Sürümü)
 Kurulum, harici C++ runtime veya ağır SDK gerektirmeyen bağımsız Windows x64 yürütülebilir dosyası:
-👉 **[3point-beta-v1.exe İndir (5.9 MB)](https://github.com/Lixsuz86/3Point/raw/beta/release/3point-beta-v1.exe)**
+👉 **[3point-beta-v1.2.exe İndir (En Güncel Sürüm)](https://github.com/Lixsuz86/3Point/raw/beta/release/3point-beta-v1.2.exe)**  
+*(Önceki sürüm: [3point-beta-v1.exe](https://github.com/Lixsuz86/3Point/raw/beta/release/3point-beta-v1.exe))*
+
+#### ✨ Beta v1.2 Yenilikleri
+- **🕹️ Etkileşimli 3B Transform Gizmolari:** Viewport üzerinden doğrudan nesne manipülasyonu: Taşıma (`G`), Döndürme (`R`), Ölçekleme (`S`) ve iptal (`Esc`).
+- **🎥 Perspektif Kamera & ☀️ Yönlü Işık 3D Simgeleri:** Sahnedeki kamera için piramit frustum ve ışık kaynağı için güneş diski + yön ışınları.
+- **🧊 Çoklu Nesne Yönetimi & Kalıcılık:** Yeni primitif eklendiğinde önceki nesneler silinmez; bağımsız GPU tamponları, materyal renkleri ve `Del`/`Backspace`/`X` ile nesne silme desteği.
+- **🎛️ Dinamik Stüdyo Modları (Modelleme, Animasyon, Sahne, Oyun):** Üst menü geçişlerinde paneller, araç kutuları ve alt zaman çizelgesi (Timeline) moda özel olarak otomatik olarak uyarlanır.
 
 ---
 

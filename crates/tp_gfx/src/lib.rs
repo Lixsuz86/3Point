@@ -22,6 +22,7 @@ pub mod swapchain;
 pub mod sync;
 
 pub use ash::{self, vk};
+pub use gpu_allocator;
 pub use buffer::GpuBuffer;
 pub use context::{FrameContext, GfxContext};
 pub use debug_draw::{LineVertex, VulkanDebugDraw};
