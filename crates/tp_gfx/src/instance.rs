@@ -128,6 +128,7 @@ impl Drop for VulkanInstance {
 }
 
 /// Vulkan doğrulama katmanı hata ayıklama geri çağırım fonksiyonu.
+// SAFETY: Vulkan C ABI standardına uygun harici hata ayıklama mesaj geri çağırımı.
 unsafe extern "system" fn vulkan_debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_types: vk::DebugUtilsMessageTypeFlagsEXT,

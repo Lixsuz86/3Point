@@ -112,6 +112,11 @@ pub fn render_top_menu(
             if ui.checkbox(&mut true, "Zemin Izgarası (Grid)").clicked() {
                 triggered_action = Some(MenuAction::ToggleGrid);
             }
+            ui.separator();
+            ui.label(RichText::new("Gölgeleme Modu:").strong());
+            ui.selectable_value(shading_mode, ShadingMode::Wireframe, "🕸️ Tel Kafes (Wireframe)");
+            ui.selectable_value(shading_mode, ShadingMode::MatCap, "🎨 Stüdyo MatCap");
+            ui.selectable_value(shading_mode, ShadingMode::Pbr, "☀️ Fiziksel PBR (Cook-Torrance)");
         });
 
         ui.separator();

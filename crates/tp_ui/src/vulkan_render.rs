@@ -85,6 +85,7 @@ pub struct VulkanTexture {
 impl VulkanTexture {
     /// Doku kaynaklarını GPU'dan serbest bırakır.
     pub fn destroy(&mut self, device: &Device, allocator: &mut Allocator) {
+        // SAFETY: Vulkan sampler, image view ve image geçerlidir ve kullanımları sonlanmıştır.
         unsafe {
             device.destroy_sampler(self.sampler, None);
             device.destroy_image_view(self.view, None);
@@ -135,6 +136,7 @@ impl EguiVulkanRenderer {
         ];
 
         let dsl_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&dsl_bindings);
+        // SAFETY: dsl_info geçerli bağlayıcı tanımlarını içerir.
         let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&dsl_info, None)? };
 
         // Descriptor Pool
@@ -149,6 +151,7 @@ impl EguiVulkanRenderer {
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
             .max_sets(16);
+        // SAFETY: pool_info geçerli havuz boyutları ile tanımlanmıştır.
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
         // Köşe düzeni tanımları
@@ -264,10 +267,12 @@ impl EguiVulkanRenderer {
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1);
 
+            // SAFETY: Havuz geçerlidir ve tek seferlik komut tamponu tahsis edilir.
             let cmd = unsafe { device.allocate_command_buffers(&alloc_info)?[0] };
             let begin_info = vk::CommandBufferBeginInfo::default()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
+            // SAFETY: Geçerli komut tamponu başlatılır ve kopyalama bariyerleri işlenir.
             unsafe {
                 device.begin_command_buffer(cmd, &begin_info)?;
 
@@ -373,7 +378,9 @@ impl EguiVulkanRenderer {
                 .samples(vk::SampleCountFlags::TYPE_1)
                 .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
+            // SAFETY: image_info geçerli bir 2B doku tanımıdır.
             let image = unsafe { device.create_image(&image_info, None)? };
+            // SAFETY: image nesnesi geçerlidir.
             let reqs = unsafe { device.get_image_memory_requirements(image) };
 
             let allocation = allocator.allocate(&AllocationCreateDesc {
@@ -384,6 +391,7 @@ impl EguiVulkanRenderer {
                 allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
             }).map_err(|e| GfxError::Generic(format!("Font dokusu bellek hatası: {e}")))?;
 
+            // SAFETY: Bellek tahsisi başarılıdır ve görüntüye bağlanır.
             unsafe {
                 device.bind_image_memory(image, allocation.memory(), allocation.offset())?;
             }
@@ -393,10 +401,12 @@ impl EguiVulkanRenderer {
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1);
 
+            // SAFETY: Havuz geçerlidir ve tek seferlik komut tamponu tahsis edilir.
             let cmd = unsafe { device.allocate_command_buffers(&alloc_info)?[0] };
             let begin_info = vk::CommandBufferBeginInfo::default()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
+            // SAFETY: Geçerli komut tamponu başlatılır ve kopyalama bariyerleri işlenir.
             unsafe {
                 device.begin_command_buffer(cmd, &begin_info)?;
 
@@ -490,6 +500,7 @@ impl EguiVulkanRenderer {
                     base_array_layer: 0,
                     layer_count: 1,
                 });
+            // SAFETY: view_info geçerli doku görüntüsü tanımlarını içerir.
             let view = unsafe { device.create_image_view(&view_info, None)? };
 
             let sampler_info = vk::SamplerCreateInfo::default()
@@ -504,12 +515,14 @@ impl EguiVulkanRenderer {
                 .unnormalized_coordinates(false)
                 .compare_enable(false)
                 .mipmap_mode(vk::SamplerMipmapMode::LINEAR);
+            // SAFETY: sampler_info geçerli filtreleme ve kenar modu tanımlarını içerir.
             let sampler = unsafe { device.create_sampler(&sampler_info, None)? };
 
             let set_layouts = [self.descriptor_set_layout];
             let alloc_info = vk::DescriptorSetAllocateInfo::default()
                 .descriptor_pool(self.descriptor_pool)
                 .set_layouts(&set_layouts);
+            // SAFETY: Tanımlayıcı havuzu geçerlidir ve yeterli kapasiteye sahiptir.
             let descriptor_set = unsafe { device.allocate_descriptor_sets(&alloc_info)?[0] };
 
             let image_info = [vk::DescriptorImageInfo::default()
@@ -530,6 +543,7 @@ impl EguiVulkanRenderer {
                     .descriptor_type(vk::DescriptorType::SAMPLER)
                     .image_info(&sampler_info),
             ];
+            // SAFETY: writes tanımlayıcı kümesi için geçerli hedef ve kaynak bağlantılarını içerir.
             unsafe {
                 device.update_descriptor_sets(&writes, &[]);
             }

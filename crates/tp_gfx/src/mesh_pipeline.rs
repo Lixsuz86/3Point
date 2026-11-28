@@ -1,12 +1,13 @@
-//! 3Point 3D Mesh Render Boru Hattı (MatCap Modelleme ve PBR Desteği).
+//! 3Point 3D Mesh Render Boru Hattı (MatCap Modelleme ve Cook-Torrance PBR Desteği).
 
 use crate::{
     error::GfxError,
+    material::PbrMaterial,
     pipeline::GraphicsPipelineBuilder,
     shader::{compile_wgsl_to_spirv, create_shader_module},
 };
 use ash::{vk, Device};
-use glam::{Mat4, Vec3, Vec4};
+use glam::{Mat4, Vec3};
 
 /// 3D Mesh köşe veri yapısı.
 #[repr(C)]
@@ -60,7 +61,7 @@ impl MeshVertex {
     }
 }
 
-/// Mesh renderı için Push Constant parametreleri.
+/// Mesh renderı için Push Constant parametreleri (std430 uyumlu 208 bayt).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MeshPushConstants {
@@ -71,10 +72,15 @@ pub struct MeshPushConstants {
     pub base_color: [f32; 4],
     pub metallic: f32,
     pub roughness: f32,
-    pub _padding: [f32; 2],
+    pub ao: f32,
+    pub _pad0: f32,
+    pub emissive: [f32; 3],
+    pub _pad1: f32,
+    pub light_dir: [f32; 3],
+    pub _pad2: f32,
 }
 
-/// Ölçeklenebilir 3D Mesh Shader'ı (MatCap ve Cook-Torrance PBR).
+/// Ölçeklenebilir 3D Mesh Shader'ı (MatCap Modelleme ve ACES Ton Eşlemeli Cook-Torrance PBR).
 const MESH_WGSL: &str = r#"
 struct PushConstants {
     model: mat4x4<f32>,
@@ -84,6 +90,12 @@ struct PushConstants {
     base_color: vec4<f32>,
     metallic: f32,
     roughness: f32,
+    ao: f32,
+    _pad0: f32,
+    emissive: vec3<f32>,
+    _pad1: f32,
+    light_dir: vec3<f32>,
+    _pad2: f32,
 };
 
 var<push_constant> pc: PushConstants;
@@ -125,7 +137,7 @@ fn main_fs(in: VertexOutput) -> @location(0) vec4<f32> {
     let N = normalize(in.normal);
     let V = normalize(pc.camera_pos - in.world_pos);
 
-    // 0: Unlit
+    // 0: Unlit (Işıksız Düz Renk)
     if (pc.render_mode == 0u) {
         return in.color;
     }
@@ -145,7 +157,7 @@ fn main_fs(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // 2: Cook-Torrance Mikro Yüzey PBR Modu
-    let L = normalize(vec3<f32>(0.6, 1.0, 0.5));
+    let L = normalize(-pc.light_dir);
     let H = normalize(V + L);
     let NdotL = max(dot(N, L), 0.0);
     let NdotV = max(dot(N, V), 0.001);
@@ -154,10 +166,10 @@ fn main_fs(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Fresnel Schlick
     let F0 = mix(vec3<f32>(0.04), in.color.rgb, pc.metallic);
-    let F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+    let F = F0 + (1.0 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
 
     // Trowbridge-Reitz GGX
-    let a = pc.roughness * pc.roughness;
+    let a = max(pc.roughness * pc.roughness, 0.001);
     let a2 = a * a;
     let denom = (NdotH * NdotH * (a2 - 1.0) + 1.0);
     let D = a2 / (PI * denom * denom);
@@ -172,10 +184,28 @@ fn main_fs(in: VertexOutput) -> @location(0) vec4<f32> {
     let kD = (vec3<f32>(1.0) - F) * (1.0 - pc.metallic);
     let diffuse = kD * in.color.rgb / PI;
 
-    let ambient = vec3<f32>(0.05) * in.color.rgb;
-    let color = ambient + (diffuse + specular) * 2.5 * NdotL;
+    // Ortam Aydınlatması (Hemispherical Ambient) + AO
+    let sky_ambient = vec3<f32>(0.08, 0.09, 0.12);
+    let ground_ambient = vec3<f32>(0.04, 0.03, 0.02);
+    let hemi_ambient = mix(ground_ambient, sky_ambient, N.y * 0.5 + 0.5);
+    let ambient = hemi_ambient * in.color.rgb * pc.ao;
 
-    return vec4<f32>(color, in.color.a);
+    // Doğrudan Işık, Yansıma ve Emissive
+    let direct = (diffuse + specular) * 3.0 * NdotL;
+    let hdr_color = ambient + direct + pc.emissive;
+
+    // ACES Filmik Ton Eşleme (Filmic Tone Mapping)
+    let a_aces = 2.51;
+    let b_aces = 0.03;
+    let c_aces = 2.43;
+    let d_aces = 0.59;
+    let e_aces = 0.14;
+    let mapped = clamp((hdr_color * (a_aces * hdr_color + b_aces)) / (hdr_color * (c_aces * hdr_color + d_aces) + e_aces), vec3<f32>(0.0), vec3<f32>(1.0));
+
+    // Gamma 2.2 Düzeltmesi (Linear -> sRGB)
+    let srgb = pow(mapped, vec3<f32>(1.0 / 2.2));
+
+    return vec4<f32>(srgb, in.color.a);
 }
 "#;
 
@@ -233,22 +263,26 @@ impl VulkanMeshPipeline {
         view_proj: Mat4,
         camera_pos: Vec3,
         render_mode: u32,
-        base_color: Vec4,
-        metallic: f32,
-        roughness: f32,
+        material: &PbrMaterial,
+        light_dir: Vec3,
     ) {
         let pc = MeshPushConstants {
             model: model.to_cols_array_2d(),
             view_proj: view_proj.to_cols_array_2d(),
             camera_pos: camera_pos.to_array(),
             render_mode,
-            base_color: base_color.to_array(),
-            metallic,
-            roughness,
-            _padding: [0.0; 2],
+            base_color: material.base_color.to_array(),
+            metallic: material.metallic,
+            roughness: material.roughness,
+            ao: material.ao,
+            _pad0: 0.0,
+            emissive: material.emissive.to_array(),
+            _pad1: 0.0,
+            light_dir: light_dir.to_array(),
+            _pad2: 0.0,
         };
 
-        // SAFETY: Pipeline ve buffer'lar bağlanır.
+        // SAFETY: Pipeline ve komut tamponu geçerli durumda, köşe ve indeks tamponları bağlıdır.
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
 
@@ -269,11 +303,10 @@ impl VulkanMeshPipeline {
 
     /// Kaynakları serbest bırakır.
     pub fn destroy(&mut self, device: &Device) {
-        // SAFETY: vkDestroyPipeline ve vkDestroyPipelineLayout.
+        // SAFETY: Pipeline ve layout nesneleri geçerlidir ve GPU üzerindeki kullanımları sonlanmıştır.
         unsafe {
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.layout, None);
         }
     }
 }
-

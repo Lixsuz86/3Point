@@ -11,7 +11,7 @@ pub mod vulkan_render;
 pub use editor::{Editor, EditorEvent, EditorMeshInfo, EditorSceneContext};
 pub use panels::{
     render_inspector, render_outliner, render_timeline, render_toolbox, render_top_menu,
-    InspectorAction, InspectorData, MenuAction, SceneObject, ShadingMode, StudioMode,
+    InspectorAction, InspectorData, MaterialPreset, MenuAction, SceneObject, ShadingMode, StudioMode,
     TimelineAction, TimelineData, ToolAction, TransformTool,
 };
 pub use theme::apply_studio_theme;

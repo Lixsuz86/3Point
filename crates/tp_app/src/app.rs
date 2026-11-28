@@ -3,7 +3,7 @@
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::sync::Arc;
 use tp_core::{TaskPool, Time};
-use tp_gfx::{ash, gpu_allocator, GfxContext, GpuBuffer};
+use tp_gfx::{ash, gpu_allocator, GfxContext, GpuBuffer, PbrMaterial};
 use tp_math::{
     glam::{EulerRot, Mat4, Quat},
     Frustum, Transform, Vec3, Vec4,
@@ -26,8 +26,8 @@ use tp_scene::{
     LightComponent, Scene,
 };
 use tp_ui::{
-    Editor, EditorEvent, EditorMeshInfo, EditorSceneContext, SceneObject, ShadingMode,
-    TransformTool,
+    Editor, EditorEvent, EditorMeshInfo, EditorSceneContext, MaterialPreset, SceneObject,
+    ShadingMode, TransformTool,
 };
 use winit::{
     application::ApplicationHandler,
@@ -55,7 +55,7 @@ pub struct SceneMeshObject {
     pub position: Vec3,
     pub rotation: Vec3,
     pub scale: Vec3,
-    pub color: Vec4,
+    pub material: PbrMaterial,
     pub visible: bool,
     pub selected_face: Option<FaceId>,
 }
@@ -63,6 +63,7 @@ pub struct SceneMeshObject {
 impl SceneMeshObject {
     pub fn new(id: u32, name: String, mesh: HalfEdgeMesh, position: Vec3, color: Vec4) -> Self {
         let bvh = MeshBvh::build(&mesh);
+        let material = PbrMaterial::new(name.clone(), color, 0.15, 0.45);
         Self {
             id,
             name,
@@ -72,7 +73,7 @@ impl SceneMeshObject {
             position,
             rotation: Vec3::ZERO,
             scale: Vec3::ONE,
-            color,
+            material,
             visible: true,
             selected_face: None,
         }
@@ -102,13 +103,34 @@ impl SceneMeshObject {
             old.index_buffer.destroy(device, allocator);
         }
 
-        let mut vb = GpuBuffer::new_vertex_buffer(device, allocator, v_size)
-            .expect("Vertex buffer oluşturulamadı");
-        let mut ib = GpuBuffer::new_index_buffer(device, allocator, i_size)
-            .expect("Index buffer oluşturulamadı");
+        let mut vb = match GpuBuffer::new_vertex_buffer(device, allocator, v_size) {
+            Ok(buf) => buf,
+            Err(e) => {
+                tracing::error!("Vertex buffer oluşturulamadı: {e}");
+                return;
+            }
+        };
+        let mut ib = match GpuBuffer::new_index_buffer(device, allocator, i_size) {
+            Ok(buf) => buf,
+            Err(e) => {
+                tracing::error!("Index buffer oluşturulamadı: {e}");
+                vb.destroy(device, allocator);
+                return;
+            }
+        };
 
-        vb.write_data(&vertices).expect("Vertex veri yazımı başarısız");
-        ib.write_data(&indices).expect("Index veri yazımı başarısız");
+        if let Err(e) = vb.write_data(&vertices) {
+            tracing::error!("Vertex veri yazımı başarısız: {e}");
+            vb.destroy(device, allocator);
+            ib.destroy(device, allocator);
+            return;
+        }
+        if let Err(e) = ib.write_data(&indices) {
+            tracing::error!("Index veri yazımı başarısız: {e}");
+            vb.destroy(device, allocator);
+            ib.destroy(device, allocator);
+            return;
+        }
 
         self.gpu = Some(ActiveMeshGpu {
             vertex_buffer: vb,
@@ -215,7 +237,7 @@ impl App {
         let skinning_matrices = vec![Mat4::IDENTITY; bone_count];
 
         // Örnek Animasyon Klibi (Swaying / Idle)
-        let mut clip = AnimationClip::new("Idle_Sway", 3.0).unwrap();
+        let mut clip = AnimationClip::new("Idle_Sway", 3.0).unwrap_or_default();
         let mut spine_track = BoneTrack::new(spine_bone);
         let mut spine_rot = AnimationCurve::new(Interpolation::Linear);
         spine_rot.add_keyframe(Keyframe::new(0.0, Quat::from_rotation_z(-0.15)));
@@ -747,8 +769,23 @@ impl ApplicationHandler for App {
                 // 6-Düzlemli Analitik Frustum
                 let frustum = Frustum::from_view_projection(view_proj);
 
-                // 2. UI Güncellemesi (Tessellation)
-                let (active_name, mut pos, mut rot, mut scale, v_cnt, e_cnt, f_cnt, sel_face) = {
+                // 2. UI Güncellemesi (Tessellation & Material)
+                let (
+                    active_name,
+                    mut pos,
+                    mut rot,
+                    mut scale,
+                    mat_name,
+                    mut mat_color,
+                    mut mat_metallic,
+                    mut mat_roughness,
+                    mut mat_emissive,
+                    mut mat_ao,
+                    v_cnt,
+                    e_cnt,
+                    f_cnt,
+                    sel_face,
+                ) = {
                     if let Some(idx) = self.selected_mesh_index() {
                         let m = &self.mesh_objects[idx];
                         (
@@ -756,13 +793,34 @@ impl ApplicationHandler for App {
                             m.position,
                             m.rotation,
                             m.scale,
+                            m.material.name.clone(),
+                            m.material.base_color.to_array(),
+                            m.material.metallic,
+                            m.material.roughness,
+                            m.material.emissive.to_array(),
+                            m.material.ao,
                             m.mesh.vertices.len(),
                             m.mesh.edges.len(),
                             m.mesh.faces.len(),
                             m.selected_face,
                         )
                     } else {
-                        ("Seçim Yok".to_string(), Vec3::ZERO, Vec3::ZERO, Vec3::ONE, 0, 0, 0, None)
+                        (
+                            "Seçim Yok".to_string(),
+                            Vec3::ZERO,
+                            Vec3::ZERO,
+                            Vec3::ONE,
+                            "Yok".to_string(),
+                            [0.82, 0.84, 0.88, 1.0],
+                            0.15,
+                            0.45,
+                            [0.0, 0.0, 0.0],
+                            1.0,
+                            0,
+                            0,
+                            0,
+                            None,
+                        )
                     }
                 };
 
@@ -785,6 +843,12 @@ impl ApplicationHandler for App {
                         position: &mut pos,
                         rotation: &mut rot,
                         scale: &mut scale,
+                        material_name: &mat_name,
+                        base_color: &mut mat_color,
+                        metallic: &mut mat_metallic,
+                        roughness: &mut mat_roughness,
+                        emissive: &mut mat_emissive,
+                        ao: &mut mat_ao,
                         vertex_count: v_cnt,
                         edge_count: e_cnt,
                         face_count: f_cnt,
@@ -804,17 +868,36 @@ impl ApplicationHandler for App {
                     None
                 };
 
-                // UI'dan gelen olası transform değişikliklerini seçili nesneye uygula
+                // UI'dan gelen olası transform ve materyal değişikliklerini seçili nesneye uygula
                 if let Some(idx) = self.selected_mesh_index() {
                     let m = &mut self.mesh_objects[idx];
                     m.position = pos;
                     m.rotation = rot;
                     m.scale = scale;
+                    m.material.base_color = Vec4::from_array(mat_color);
+                    m.material.metallic = mat_metallic;
+                    m.material.roughness = mat_roughness;
+                    m.material.emissive = Vec3::from_array(mat_emissive);
+                    m.material.ao = mat_ao;
                 }
 
                 // UI Buton Olaylarını İşle
                 if let Some(event) = editor_event {
                     match event {
+                        EditorEvent::ApplyMaterialPreset(preset) => {
+                            if let Some(idx) = self.selected_mesh_index() {
+                                let m = &mut self.mesh_objects[idx];
+                                m.material = match preset {
+                                    MaterialPreset::Gold => PbrMaterial::gold(),
+                                    MaterialPreset::Copper => PbrMaterial::copper(),
+                                    MaterialPreset::Chrome => PbrMaterial::chrome(),
+                                    MaterialPreset::Plastic => PbrMaterial::plastic(m.material.base_color),
+                                    MaterialPreset::Rubber => PbrMaterial::rubber(),
+                                    MaterialPreset::Clay => PbrMaterial::clay(),
+                                };
+                                tracing::info!("Seçili nesneye PBR materyali uygulandı: {}", m.material.name);
+                            }
+                        }
                         EditorEvent::AddPrimitive(name) => {
                             let mesh = match name {
                                 "Cube" => create_cube(Vec3::splat(1.5)),
@@ -838,6 +921,13 @@ impl ApplicationHandler for App {
                             };
 
                             let mut obj = SceneMeshObject::new(new_id, format!("{} {}", name, new_id), mesh, pos, color);
+                            obj.material = match name {
+                                "Sphere" => PbrMaterial::gold(),
+                                "Cylinder" => PbrMaterial::copper(),
+                                "Plane" => PbrMaterial::new("Düzlem Materyali", color, 0.0, 0.8),
+                                _ => PbrMaterial::new(format!("{} Materyali", name), color, 0.2, 0.45),
+                            };
+
                             if let Some(gfx) = &mut self.gfx {
                                 obj.sync_to_gpu(&gfx.device.device, &mut gfx.allocator);
                             }
@@ -1038,9 +1128,8 @@ impl ApplicationHandler for App {
                                         view_proj,
                                         eye,
                                         render_mode,
-                                        obj.color,
-                                        0.2,
-                                        0.4,
+                                        &obj.material,
+                                        self.light_object_dir,
                                     );
                                 }
                             }

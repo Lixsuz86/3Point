@@ -55,6 +55,16 @@ pub struct AnimationClip {
     pub tracks: Vec<BoneTrack>,
 }
 
+impl Default for AnimationClip {
+    fn default() -> Self {
+        Self {
+            name: "DefaultClip".to_string(),
+            duration: 1.0,
+            tracks: Vec::new(),
+        }
+    }
+}
+
 impl AnimationClip {
     /// Yeni bir animasyon klibi oluşturur.
     pub fn new(name: impl Into<String>, duration: f32) -> Result<Self, AnimError> {

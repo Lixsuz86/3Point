@@ -139,6 +139,7 @@ impl GfxContext {
         }
 
         let image_available_semaphore = self.sync.image_available_semaphores[self.current_frame];
+        // SAFETY: Swapchain loader geçerli bir swapchain tanıtıcısından bir sonraki görüntüyü ister.
         let acquire_result = unsafe {
             self.swapchain.loader.acquire_next_image(
                 self.swapchain.swapchain,

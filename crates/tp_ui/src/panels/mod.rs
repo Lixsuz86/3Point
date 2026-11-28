@@ -6,7 +6,7 @@ pub mod timeline;
 pub mod tools;
 pub mod top_menu;
 
-pub use inspector::{render_inspector, InspectorAction, InspectorData};
+pub use inspector::{render_inspector, InspectorAction, InspectorData, MaterialPreset};
 pub use outliner::{render_outliner, SceneObject};
 pub use timeline::{render_timeline, TimelineAction, TimelineData};
 pub use tools::{render_toolbox, ToolAction, TransformTool};

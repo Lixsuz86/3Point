@@ -1,14 +1,31 @@
 //! 3Point Özellikler ve Parametreler Paneli (Inspector).
 
-use egui::{Color32, DragValue, Grid, RichText, Ui};
+use egui::{Color32, DragValue, Grid, RichText, Slider, Ui};
 use glam::Vec3;
 use tp_mesh::topology::FaceId;
+
+/// Hazır PBR Materyal şablonları.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaterialPreset {
+    Gold,
+    Copper,
+    Chrome,
+    Plastic,
+    Rubber,
+    Clay,
+}
 
 /// Inspector paneli için veri girdi yapısı.
 pub struct InspectorData<'a> {
     pub position: &'a mut Vec3,
     pub rotation: &'a mut Vec3,
     pub scale: &'a mut Vec3,
+    pub material_name: &'a str,
+    pub base_color: &'a mut [f32; 4],
+    pub metallic: &'a mut f32,
+    pub roughness: &'a mut f32,
+    pub emissive: &'a mut [f32; 3],
+    pub ao: &'a mut f32,
     pub vertex_count: usize,
     pub edge_count: usize,
     pub face_count: usize,
@@ -27,6 +44,7 @@ pub enum InspectorAction {
     Extrude(f32),
     Inset(f32),
     Subdivide,
+    ApplyPreset(MaterialPreset),
 }
 
 /// Inspector panelini render eder.
@@ -91,7 +109,59 @@ pub fn render_inspector(ui: &mut Ui, data: InspectorData<'_>) -> Option<Inspecto
 
     ui.separator();
 
-    // 2. Mesh Topoloji Bilgisi
+    // 2. PBR Materyal Bölümü (Faz 7)
+    ui.collapsing("🎨 PBR Materyal (Cook-Torrance)", |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Materyal:");
+            ui.label(RichText::new(data.material_name).strong());
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Temel Renk (Albedo):");
+            ui.color_edit_button_rgba_unmultiplied(data.base_color);
+        });
+
+        ui.add(Slider::new(data.metallic, 0.0..=1.0).text("Metalik"));
+        ui.add(Slider::new(data.roughness, 0.04..=1.0).text("Pürüzlülük"));
+        ui.add(Slider::new(data.ao, 0.0..=1.0).text("Ortam Karartma (AO)"));
+
+        ui.horizontal(|ui| {
+            ui.label("Işıma (Emissive):");
+            let mut em_color = [data.emissive[0], data.emissive[1], data.emissive[2]];
+            if ui.color_edit_button_rgb(&mut em_color).changed() {
+                data.emissive[0] = em_color[0];
+                data.emissive[1] = em_color[1];
+                data.emissive[2] = em_color[2];
+            }
+        });
+
+        ui.add_space(4.0);
+        ui.label(RichText::new("Hazır Şablonlar (Presets):").small().strong());
+        ui.horizontal_wrapped(|ui| {
+            if ui.small_button("🥇 Altın").clicked() {
+                action = Some(InspectorAction::ApplyPreset(MaterialPreset::Gold));
+            }
+            if ui.small_button("🥉 Bakır").clicked() {
+                action = Some(InspectorAction::ApplyPreset(MaterialPreset::Copper));
+            }
+            if ui.small_button("🪞 Krom").clicked() {
+                action = Some(InspectorAction::ApplyPreset(MaterialPreset::Chrome));
+            }
+            if ui.small_button("🔴 Plastik").clicked() {
+                action = Some(InspectorAction::ApplyPreset(MaterialPreset::Plastic));
+            }
+            if ui.small_button("⬛ Kauçuk").clicked() {
+                action = Some(InspectorAction::ApplyPreset(MaterialPreset::Rubber));
+            }
+            if ui.small_button("🧱 Kil").clicked() {
+                action = Some(InspectorAction::ApplyPreset(MaterialPreset::Clay));
+            }
+        });
+    });
+
+    ui.separator();
+
+    // 3. Mesh Topoloji Bilgisi
     ui.collapsing("📊 Mesh İstatistikleri", |ui| {
         ui.horizontal(|ui| {
             ui.label("Köşeler (Vertices):");
@@ -115,7 +185,7 @@ pub fn render_inspector(ui: &mut Ui, data: InspectorData<'_>) -> Option<Inspecto
 
     ui.separator();
 
-    // 3. Modelleme Operatörleri ve Parametreleri
+    // 4. Modelleme Operatörleri ve Parametreleri
     ui.collapsing("🛠️ Modelleme Operatörleri", |ui| {
         ui.add_enabled_ui(data.selected_face.is_some(), |ui| {
             ui.horizontal(|ui| {
@@ -143,7 +213,7 @@ pub fn render_inspector(ui: &mut Ui, data: InspectorData<'_>) -> Option<Inspecto
 
     ui.separator();
 
-    // 4. Performans ve Telemetri (Faz 6)
+    // 5. Performans ve Telemetri (Faz 6)
     ui.collapsing("⚡ Performans & Düşük Donanım", |ui| {
         ui.horizontal(|ui| {
             ui.label("FPS:");

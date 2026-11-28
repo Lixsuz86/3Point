@@ -43,6 +43,7 @@ pub enum EditorEvent {
     Export3P,
     SelectObject(SceneObject),
     DeleteSelectedObject,
+    ApplyMaterialPreset(crate::panels::MaterialPreset),
 }
 
 /// Sahnedeki her bir nesnenin Outliner bilgisi.
@@ -61,6 +62,12 @@ pub struct EditorSceneContext<'a> {
     pub position: &'a mut Vec3,
     pub rotation: &'a mut Vec3,
     pub scale: &'a mut Vec3,
+    pub material_name: &'a str,
+    pub base_color: &'a mut [f32; 4],
+    pub metallic: &'a mut f32,
+    pub roughness: &'a mut f32,
+    pub emissive: &'a mut [f32; 3],
+    pub ao: &'a mut f32,
     pub vertex_count: usize,
     pub edge_count: usize,
     pub face_count: usize,
@@ -308,6 +315,12 @@ impl Editor {
                             position: scene.position,
                             rotation: scene.rotation,
                             scale: scene.scale,
+                            material_name: scene.material_name,
+                            base_color: scene.base_color,
+                            metallic: scene.metallic,
+                            roughness: scene.roughness,
+                            emissive: scene.emissive,
+                            ao: scene.ao,
                             vertex_count: scene.vertex_count,
                             edge_count: scene.edge_count,
                             face_count: scene.face_count,
@@ -325,6 +338,7 @@ impl Editor {
                                 InspectorAction::Extrude(d) => triggered_event = Some(EditorEvent::Extrude(d)),
                                 InspectorAction::Inset(f) => triggered_event = Some(EditorEvent::Inset(f)),
                                 InspectorAction::Subdivide => triggered_event = Some(EditorEvent::Subdivide),
+                                InspectorAction::ApplyPreset(p) => triggered_event = Some(EditorEvent::ApplyMaterialPreset(p)),
                             }
                         }
                     }

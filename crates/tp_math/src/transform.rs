@@ -136,7 +136,7 @@ impl Transform {
             Vec3::ONE / self.scale,
         );
         let inv_rot = self.rotation.inverse();
-        let inv_trans = inv_rot * (-self.translation * inv_scale);
+        let inv_trans = (inv_rot * -self.translation) * inv_scale;
 
         Self {
             translation: inv_trans,
@@ -179,6 +179,21 @@ mod tests {
             Vec3::new(2.0, 2.0, 2.0),
         );
         let pt = Vec3::new(1.0, 2.0, 3.0);
+        let transformed = t.transform_point(pt);
+        let inv = t.inverse();
+        let restored = inv.transform_point(transformed);
+
+        assert!((restored - pt).length() < 1e-5);
+    }
+
+    #[test]
+    fn test_inverse_translation_and_rotation() {
+        let t = Transform::from_trs(
+            Vec3::new(12.0, -4.0, 7.0),
+            Quat::from_rotation_z(0.35),
+            Vec3::ONE,
+        );
+        let pt = Vec3::new(3.0, -1.0, 2.0);
         let transformed = t.transform_point(pt);
         let inv = t.inverse();
         let restored = inv.transform_point(transformed);

@@ -163,6 +163,7 @@ fn rate_physical_device(
             .get_physical_device_surface_formats(device, surface.surface)
             .unwrap_or_default()
     };
+    // SAFETY: Fiziksel cihazın sunum modlarının sorgulanması.
     let present_modes = unsafe {
         surface
             .loader

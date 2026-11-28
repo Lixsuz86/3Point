@@ -48,7 +48,18 @@ impl TaskPool {
 
 impl Default for TaskPool {
     fn default() -> Self {
-        Self::new(None).expect("Varsayılan TaskPool başlatılamadı!")
+        Self::new(None).unwrap_or_else(|_| {
+            Self::new(Some(1)).unwrap_or_else(|_| {
+                // Rayon fallback: single thread execution
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(1)
+                    .build()
+                    .unwrap_or_else(|e| panic!("Kritik: TaskPool oluşturulamadı: {e}"));
+                Self {
+                    pool: std::sync::Arc::new(pool),
+                }
+            })
+        })
     }
 }
 
