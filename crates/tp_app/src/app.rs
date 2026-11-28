@@ -248,6 +248,8 @@ impl App {
 
         let mut anim_player = AnimationPlayer::new();
         anim_player.play(clip, true);
+        anim_player.pause(); // Başlangıçta animasyon duraklatılmış olarak başlar (otomatik çekim yapmaz)
+        anim_player.current_time = 0.0;
 
         // Sahne Grafiği ve Varsayılan Varlıklar (Faz 5: tp_scene)
         let mut scene = Scene::new();
@@ -980,17 +982,63 @@ impl ApplicationHandler for App {
                             self.scene = create_physics_sandbox();
                         }
                         EditorEvent::ExportObj => {
-                            if let Some(idx) = self.selected_mesh_index() {
-                                let obj = &self.mesh_objects[idx];
+                            let target_idx = self.selected_mesh_index().unwrap_or(0);
+                            if let Some(obj) = self.mesh_objects.get(target_idx) {
                                 let out = export_obj(&obj.mesh, &obj.name);
-                                tracing::info!("Model Wavefront OBJ olarak hazırlandı ({} bayt)", out.len());
+                                let clean_name = obj.name.trim().replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
+                                let clean_name = if clean_name.is_empty() { "model" } else { &clean_name };
+                                let file_name = format!("{clean_name}.obj");
+                                match std::fs::write(&file_name, out.as_bytes()) {
+                                    Ok(()) => {
+                                        let msg = format!("OBJ dosyası oluşturuldu: {file_name} ({} bayt)", out.len());
+                                        tracing::info!("{msg}");
+                                        if let Some(ed) = &mut self.editor {
+                                            ed.set_notification(format!("✅ {msg}"));
+                                        }
+                                        if std::fs::create_dir_all("exports").is_ok() {
+                                            let _ = std::fs::write(format!("exports/{file_name}"), out.as_bytes());
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let msg = format!("OBJ dosyası diske yazılamadı: {e}");
+                                        tracing::error!("{msg}");
+                                        if let Some(ed) = &mut self.editor {
+                                            ed.set_notification(format!("❌ {msg}"));
+                                        }
+                                    }
+                                }
+                            } else if let Some(ed) = &mut self.editor {
+                                ed.set_notification("⚠️ Dışa aktarılacak 3D model bulunamadı");
                             }
                         }
                         EditorEvent::Export3P => {
-                            if let Some(idx) = self.selected_mesh_index() {
-                                let obj = &self.mesh_objects[idx];
+                            let target_idx = self.selected_mesh_index().unwrap_or(0);
+                            if let Some(obj) = self.mesh_objects.get(target_idx) {
                                 let bin = export_3p(&obj.mesh);
-                                tracing::info!("Model 3P İkili formatında hazırlandı ({} bayt)", bin.len());
+                                let clean_name = obj.name.trim().replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "_");
+                                let clean_name = if clean_name.is_empty() { "model" } else { &clean_name };
+                                let file_name = format!("{clean_name}.3p");
+                                match std::fs::write(&file_name, &bin) {
+                                    Ok(()) => {
+                                        let msg = format!("3P ikili dosyası oluşturuldu: {file_name} ({} bayt)", bin.len());
+                                        tracing::info!("{msg}");
+                                        if let Some(ed) = &mut self.editor {
+                                            ed.set_notification(format!("✅ {msg}"));
+                                        }
+                                        if std::fs::create_dir_all("exports").is_ok() {
+                                            let _ = std::fs::write(format!("exports/{file_name}"), &bin);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        let msg = format!("3P dosyası diske yazılamadı: {e}");
+                                        tracing::error!("{msg}");
+                                        if let Some(ed) = &mut self.editor {
+                                            ed.set_notification(format!("❌ {msg}"));
+                                        }
+                                    }
+                                }
+                            } else if let Some(ed) = &mut self.editor {
+                                ed.set_notification("⚠️ Dışa aktarılacak 3D model bulunamadı");
                             }
                         }
                         EditorEvent::PlayGame => self.scene.start_play(),

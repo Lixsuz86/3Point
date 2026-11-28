@@ -106,6 +106,9 @@ pub struct Editor {
     pub primitives: Vec<ClippedPrimitive>,
     pub pixels_per_point: f32,
     pub textures_delta: egui::TexturesDelta,
+
+    // Geçici durum ve bildirim mesajı
+    pub notification: Option<(String, std::time::Instant)>,
 }
 
 impl Editor {
@@ -148,7 +151,13 @@ impl Editor {
             primitives: Vec::new(),
             pixels_per_point: window.scale_factor() as f32,
             textures_delta: egui::TexturesDelta::default(),
+            notification: None,
         })
+    }
+
+    /// Ekranda geçici durum ve başarı bildirim mesajı gösterir.
+    pub fn set_notification(&mut self, message: impl Into<String>) {
+        self.notification = Some((message.into(), std::time::Instant::now()));
     }
 
     /// Pencere olaylarını egui'ye iletir.
@@ -420,6 +429,20 @@ impl Editor {
                         }
                     }
                 });
+        }
+
+        // 5. Durum Bildirim Paneli (Geçici Toast/Status)
+        if let Some((msg, time)) = &self.notification {
+            if time.elapsed().as_secs_f32() < 4.0 {
+                TopBottomPanel::bottom("status_notification_panel")
+                    .resizable(false)
+                    .show(&self.egui_ctx, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("ℹ ").color(Color32::from_rgb(96, 165, 250)).strong());
+                            ui.label(RichText::new(msg).color(Color32::from_rgb(220, 225, 235)).strong());
+                        });
+                    });
+            }
         }
 
         let full_output = self.egui_ctx.end_pass();
